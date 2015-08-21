@@ -1,0 +1,45 @@
+#!/bin/bash
+
+if [ $# -lt 1 ]; then
+   echo "re-hash the files in a given folder. Is useful, because in the new version old hashes are incompatible with previous versions. "
+  echo "Usage:   moldb_rehash  Methods_folder  [ HashType ]"
+  echo "  HashType - new hash type, can be either NewHash or MD5 (default)   "
+fi
+
+Methods_folder=$1
+
+HashType=MD5
+[ $# -ge 2 ] && HashType=$2;
+
+[ ${Methods_folder:0:1} != '/' ]&& Methods_folder=$(pwd)/$Methods_folder
+
+Flist=$( find $Methods_folder | grep 'chain.imp$' )
+
+for file in $Flist
+do
+
+   fld=$(echo $file | sed 's:/chain.imp::g' )
+   cd $fld
+  
+   bkfile=chain.old
+   cnt=0
+   while [ 1 ];
+   do
+      [ -f $bkfile ]|| break;       
+      bkfile=chain.old.$cnt
+      cnt=$[cnt+1]
+   done
+
+   mv chain.imp $bkfile
+   cat $bkfile | sed 's:USE\(.*\)::g' | sed "s:RUN METHOD\([ 0-9]*\):RUN METHOD\1@USE $HashType:g" | tr @ $'\n' > chain.imp
+
+   OldHash=$(echo $fld | gawk -F/ '{print $NF}')
+   NewHash=$(moldb_getRef chain.imp | gawk -F/ '{print $NF}' )
+
+   cd ..
+   mv $OldHash $NewHash
+
+   echo $fld "=>" $NewHash
+
+done
+

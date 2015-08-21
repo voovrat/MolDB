@@ -1,0 +1,133 @@
+# Volodymyr P Sergiievskyi, voov.rat@gmail.com
+
+from moldb import Chain,str2val,buildImplementation,DefList,parseXparam
+from getopt import gnu_getopt
+import sys,os
+from iterate_over_lists import iterate_over_lists
+import errno
+
+
+
+def printRef(data):
+	
+	params = dict(data);
+
+	prototype = params.pop('moldb_prototype');
+	root = params.pop('moldb_root');
+
+	visited={}
+	m = buildImplementation(params,prototype,visited);
+
+	meth = [];
+
+	for pid in sorted(visited.keys()):
+		meth.append(visited[pid]);
+	
+	#print str(m.parameters)
+	print root+m.getRef()
+
+usage="""
+Usage:  moldb_getRef  chain   [ extraParameters ] 
+
+Prints the reference to the method.
+The parameters of the method are described in the chain file
+Coma  separated parameters parameters can be passed to the method using the following syntax
+name1=value1,name2=value2,
+
+e.g.
+
+mol_getRef chain1.chain  1  'molecule=methane,method=MD,Density=42'
+"""
+
+notUsed="""
+OPTIONS:
+
+ --printMethod : prints the generated method
+ --noRefs : do not print refs (usualy used with --printMethod)
+ --addRoot=pathToTheMethodsFolder : 
+           prints the specified path before each of the references.
+	   Allows you to get the full paths to the referenced folders (not only relative paths)
+ -p, --project:
+	Similar to --addRoot, but use the standart folder $MOLDB_PROJECTS/Project/Molecules/
+"""
+
+if __name__ == '__main__':
+	
+
+	opts,args=gnu_getopt(sys.argv[1:],'p:',['printMethod','noRefs','addRoot=','--project','noRoot']);
+	
+	if len(args)<1:
+		print usage
+		quit()
+
+	ch = Chain(args[0]);
+	methodID = ch.runMethod;
+#	methodID = args[1];
+
+	methodsDict = ch.getMethodsDict();
+#	print ch
+	method = methodsDict[methodID];
+
+	if len(args)>1: 
+		parseXparam(args[1],method,ch);
+
+
+
+	if ('--printMethod','') in opts: 
+		print method
+
+	if ('--noRefs','') in opts:
+		quit();
+
+
+	if ('--noRoot','') in opts:
+        	root=''       
+	else:
+		root=os.getenv('MOLDB_PROJECTS')+'/'+ch.project+'/Methods/'
+
+#	root='';		
+
+#	for o in opts:
+#		k,v=o
+#		
+#		if k=='--addRoot': root = v;	
+#		if k=='--project' or k=='-p': 
+#			root=os.getenv('MOLDB_PROJECTS')+'/'+v+'/Methods/'
+#
+#	if root!='' and root[-1]!='/': root+='/';
+
+
+
+
+        for dep in method.dependencies:
+
+		m = dep.method
+
+#		print m.parseId
+#                print m.name
+#		print m.parameters
+		
+		for p in method.parameters.keys():
+			if p in m.parameters:
+#				print p
+#				print method.parameters[p]
+				m.parameters[p] = method.parameters[p]
+#				pass
+		
+
+		
+		m.iterators = m.getIterators()
+		
+	#	print 'Creating folders...'
+	
+		xparam = {'moldb_prototype':m,
+			  'moldb_root':root}
+	
+		iterators = m.iterators;
+	
+		try:
+			iterate_over_lists(iterators.keys(),iterators.values(), printRef, xparam )
+		except IOError as err:
+			pass
+
+

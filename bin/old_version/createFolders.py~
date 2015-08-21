@@ -1,0 +1,100 @@
+import sys
+from moldb import Chain,Mehtod
+from iterate_over_lists import iterate_over_lists
+
+
+def getBashParams(self):
+	s='';
+	for k in sorted(self.keys()):
+		s+=k+'='+self[k].value+'\n';
+	return s;
+
+def createFolders_callback(data):
+	
+	params = dict(data);
+
+	root = params.pop('moldb_root');
+	prototype = params.pop('moldb_prototype');
+	printOnly = params.pop('moldb_printOnly');
+
+	visited={}
+	m = buildImplementation(params,prototype,visited);
+
+	meth = [];
+
+	for pid in sorted(visited.keys()):
+		meth.append(visited[pid]);
+
+	folder = root + '/' + m.getRef();	
+
+	print folder;
+
+	if printOnly: return
+
+	# mkdir
+	os.mkdir(folder);
+
+	#chain.implementation	
+	chain = Chain();
+	chain.fromMethods(meth,m.getHash(),False);
+		
+	f=open(folder + '/chain.implementaion');
+	f.write( chain.toString() );
+	f.close();
+
+	
+	#Scripts
+	strPrm = getBashParams(params);	
+	strPrm += '\n'
+	strPrm += 'PROJECT='+root+'\n'
+
+
+	for script in m.scripts:
+		f=open(script.name);
+		f.write(strPrm+script.text);
+		f.close();
+
+
+usage="""
+Usage: python createFolders <chain.prototype> <methods_folder> [ <MethodID> [-printOnly] ]
+
+Reads the chain prototype and create subfolders in the methods_folder  
+(one per each parameters combination)
+Each folder will contain:
+	- chain.implementation file
+	- localized scipt files  
+
+MethodID is optional. 
+By default, creates folders for the method, specified as RUN METHOD in chain.prototype file
+
+if -printOnly option is given, no folders will be created, only their names will be printed on the screen
+"""
+
+if len(sys)<3:
+	print usage;
+	quit();
+
+
+if len(sys)>4:
+	printOnly = (argv[4]=='-printOnly');
+else:
+	printOnly = False;
+
+print 'Opening chain prototype file '+sys.argv[1]+' ... '
+prototype=Chain(sys.argv[1]);
+print 'done'
+
+methodID = sys.argv[3] if len(sys.argv)>2 else prototype.runMethod;
+
+print 'Creating folders...'
+
+xparam={'moldb_prototype':prototype,'moldb_root':sys.argv[2],'moldb_printOnly':printOnly };
+iterators = prototype.iterators;
+
+iterate_over_lists(iterators.keys(),iterators.values(), createFolders_callback, xparam)
+
+
+	
+		
+
+

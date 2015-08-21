@@ -1,0 +1,26 @@
+#!/bin/bash
+if [ $# -lt 1 ]; then
+
+    echo usage: run_abinit_neutral  system.xyz
+    exit
+fi
+
+nam=$(echo $1 | gawk -F . '{print $1}')
+./xyz2abinit $1 > $nam.in0
+cat $nam.in0 | sed 's:charge\([ ]*\)1:charge 0:g' > $nam.in
+
+
+echo $nam.in > $nam.files
+echo $nam.out >> $nam.files
+rm -f $nam.out
+echo ${nam}_xi >> $nam.files
+echo ${nam}_xo >> $nam.files
+echo ${nam}_x >> $nam.files
+echo Psps_for_tests/01h.pspgth  >> $nam.files
+echo Psps_for_tests/08o.pspgth  >> $nam.files
+
+abinit < $nam.files > $nam.log
+EH=$(cat $nam.out | grep ETOT | tail -n1 | gawk '{print $3}')
+E=$(echo print '"%0.15f" % ('$EH'*27.2113845657195 )' | python )
+echo $E
+echo $E > E_abinit_neutral_$nam.dat

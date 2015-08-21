@@ -1,0 +1,76 @@
+#!/bin/bash
+
+#
+#
+#  uploadBase Porject server remote_moldb_root    password_file
+#  
+
+if [ $# -lt 4 ]; then
+
+echo "Usage:  uploadDependencies Chain server remote_moldb_root password_file [xparam] "
+
+
+exit
+
+fi
+
+Chain=$1
+server=$2
+remote_root=$3
+password_file=$4
+K="'"
+
+if [ -n "$5" ]; then
+	xparam=$K$5$K
+else
+	xparam=""
+fi
+
+
+
+time=$(date +%Y-%m-%d_%H.%M)
+
+echo "Compressing dependencies:"
+
+Project=$(cat $Chain | grep PROJECT | gawk '{print $2}')
+
+command="moldb_getDep $Chain --noRoot $xparam | tr $'\n' ' '"
+#echo $command
+
+#exit
+
+Dep=$(moldb_getDep $Chain --noRoot $xparam | tr $'\n' ' ')
+
+
+sshpass -f $password_file scp $Chain $server:$remote_root/Projects/$Project/Prototypes 
+
+
+cd $MOLDB_PROJECTS/$Project/Methods
+
+tarname=Dependencies_of_${Chain}_at_$time.tar
+
+
+tar -cf $tarname $Dep
+gzip $tarname
+
+echo "TAR FILE $tarname created."
+
+#exit
+
+echo "Upload dependencies:"
+
+MethodsFolder=$remote_root/Projects/$Project/Methods
+
+
+sshpass -f $password_file ssh $server "mkdir -p $MethodsFolder"
+#pwd
+echo sshpass -f $password_file scp $tarname.gz $server:$MethodsFolder
+
+sshpass -f $password_file scp $tarname.gz $server:$MethodsFolder
+sshpass -f $password_file ssh $server "cd $MethodsFolder; tar -xzf $tarname.gz; rm -f $tarname.gz "
+
+rm -f $tarname.gz
+
+
+
+

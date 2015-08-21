@@ -1,0 +1,144 @@
+[DU,EU]=unit_names;
+
+Ref=moldb_getRef('clusters.chain');
+
+E = cell_get_values(moldb_load(Ref,'energy.dat'));
+Etot = cell_get_values(moldb_load(Ref,'energy_tot.dat'));
+
+Inw = moldb_filter(Ref,{'prog','nwchem'});
+Iab = moldb_filter(Ref,{'prog','abinit'});
+Ilm = moldb_filter(Ref,{'prog','lammps'});
+
+
+Ip = moldb_filter(Ref,{'proton','T'});
+In = moldb_filter(Ref,{'proton','F'});
+
+Inwp = intersect(Inw,Ip);
+Inwn = intersect(Inw,In);
+
+Iabp = intersect(Iab,Ip);
+Iabn = intersect(Iab,In);
+
+Ilmp = intersect(Ilm,Ip);
+Ilmn = intersect(Ilm,In);
+
+
+dE_nw0 = load('E_nwchem_c1p.dat') - load('E_nwchem_c1n.dat');
+%dE_ab0 = load('E_abinit_c1p.dat') - load('E_abinit_c1n.dat');
+%dE_lm0 = load('E_lammps_c1p.dat') - load('E_lammps_c1n.dat');%
+%dE_lt0 = load('E_lammpstot_c1p.dat') - load('E_lammpstot_c1n.dat');
+
+
+dE_cw = zeros(7,1);
+
+for i=1:7
+
+   mol = [ 'c' num2str(i-1) ];
+   fmol = {'molecule',mol};
+
+   ii_ccp = moldb_filter(Ref(Inwp),fmol);
+   E_ccp = E(Inwp(ii_ccp));
+
+   ii_ccn = moldb_filter(Ref(Inwn),fmol);
+   E_ccn = E(Inwn(ii_ccn));
+
+   dE_cw(i) = E_ccp - E_ccn - dE_nw0;
+
+end
+
+dE_ww = zeros(7,7);
+
+
+for i=1:7
+for j=i+1:7
+
+   mol = [ 'c' num2str(i-1) 'c' num2str(j-1) ];
+   fmol = {'molecule',mol};
+
+   ii_ccp = moldb_filter(Ref(Inwp),fmol);
+   E_ccp = E(Inwp(ii_ccp));
+
+   ii_ccn = moldb_filter(Ref(Inwn),fmol);
+   E_ccn = E(Inwn(ii_ccn));
+
+   dE_ww(i,j) = E_ccp - E_ccn - dE_nw0 - dE_cw(i) - dE_cw(j);   
+
+end
+end
+
+fmol={'molecule','c0c1c2c3c4c5c6'};
+ii_totp = moldb_filter(Ref(Inwp),fmol);
+E_totp = E(Inwp(ii_totp));
+
+ii_totn = moldb_filter(Ref(Inwn),fmol);
+E_totn = E(Inwn(ii_totn));
+ 
+
+dE_tot = E_totp - E_totn;
+
+dE_pair = dE_nw0 + sum(dE_cw) + sum(sum(dE_ww));
+
+(dE_tot - dE_pair)*unit2unit(EU,'eV','kcal/mol')
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+ii_nwp2 = moldb_filter(Ref(Inwp),{'molecule','c0'});
+ii_nwn2 = moldb_filter(Ref(Inwn),{'molecule','c0'});
+
+dEE_nw0 = E(Inwp(ii_nwp2)) - E(Inwn(ii_nwn2));
+
+dEE_cw = zeros(6,1);
+
+
+for i=1:6
+
+   mol = [ 'c0c' num2str(i) ];
+   fmol = {'molecule',mol};
+
+   ii_ccp = moldb_filter(Ref(Inwp),fmol);
+   EE_ccp = E(Inwp(ii_ccp));
+
+   ii_ccn = moldb_filter(Ref(Inwn),fmol);
+   EE_ccn = E(Inwn(ii_ccn));
+
+   dEE_cw(i) = EE_ccp - EE_ccn - dEE_nw0;
+
+end
+
+dEE_ww = zeros(6,6);
+
+
+for i=1:6
+for j=i+1:6
+
+   mol = [ 'c0c' num2str(i) 'c' num2str(j) ];
+   fmol = {'molecule',mol};
+
+   ii_ccp = moldb_filter(Ref(Inwp),fmol);
+   EE_ccp = E(Inwp(ii_ccp));
+
+   ii_ccn = moldb_filter(Ref(Inwn),fmol);
+   EE_ccn = E(Inwn(ii_ccn));
+
+   dEE_ww(i,j) = EE_ccp - EE_ccn - dEE_nw0 - dEE_cw(i) - dEE_cw(j);   
+
+end
+end
+
+fmol={'molecule','c0c1c2c3c4c5c6'};
+ii_totp = moldb_filter(Ref(Inwp),fmol);
+E_totp = E(Inwp(ii_totp));
+
+ii_totn = moldb_filter(Ref(Inwn),fmol);
+E_totn = E(Inwn(ii_totn));
+ 
+
+dE_tot = E_totp - E_totn;
+
+dEE_pair = dEE_nw0 + sum(dEE_cw) + sum(sum(dEE_ww));
+
+(dE_tot - dEE_pair)*unit2unit(EU,'eV','kcal/mol')
+
+
+
+

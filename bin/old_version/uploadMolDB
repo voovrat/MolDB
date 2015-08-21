@@ -1,0 +1,45 @@
+#!/bin/bash
+
+
+if [ $# -lt 3 ]; then
+
+echo "Usage:  uploadBase  server remote_moldb_root password_file"
+
+
+echo "Don't forget to upload utils!!!"
+
+exit
+
+fi
+
+server=$1
+remote_root=$2
+password_file=$3
+
+time=$(date +%Y-%m-%d_%H.%M)
+
+echo "BIN:"
+
+sshpass -f $password_file ssh $server "mkdir -p $remote_root"
+
+cd $MOLDB_ROOT
+
+echo  "copmpressing bin"
+
+tar -cf bin_$time.tar bin
+gzip bin_$time.tar
+
+echo "copying bin"
+
+sshpass -f $password_file scp bin_$time.tar.gz $server:$remote_root
+
+rm -f bin_$time.tar.gz
+
+sshpass -f $password_file ssh $server "cd $remote_root; tar -xzf bin_$time.tar.gz"
+sshpass -f $password_file ssh $server "cd $remote_root; rm -f bin_$time.tar.gz"
+
+echo "setup paths:"
+
+sshpass -f $password_file scp setupPaths $server:$remote_root
+sshpass -f $password_file ssh $server "cd $remote_root; . ./setupPaths;"
+

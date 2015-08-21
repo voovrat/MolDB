@@ -1,0 +1,182 @@
+from moldb import Method,Chain,parseXparam,buildImplementation
+from iterate_over_lists import iterate_over_lists
+from getopt import gnu_getopt
+import sys,os
+
+
+usage="""
+
+Usage: moldb_printResults  Chain  rows cols file  [ restrictions ]
+
+cols : coma separated names of records, which will be represented in the colun dimension
+(rest of the fields will be represented in the row dimension)
+
+file: name of the file to display
+
+restrictions: coma separated restrictions in the format  name1=value1,name2=value2,...
+
+You can use column called "dummy" togather with restriction "dummy=Something", in the case if you do not have real parameters to show in the column (e.g. experimental results for some molecule) 
+"""
+
+def printHeader(data):
+	cols=data['moldb_cols'];
+
+	N=len(cols);
+
+	for n in range(N):
+		k=cols[n];
+		sys.stdout.write(k+'='+str(data[k].value));
+		if n<N-1: sys.stdout.write(';');
+		
+	sys.stdout.write('\t');
+
+
+def printCol(data):
+
+
+	params=dict(data);
+
+	prototype = params.pop('moldb_prototype');
+	root=params.pop('moldb_root');
+	rows = params.pop( 'moldb_rows');
+	cols = params.pop( 'moldb_cols');
+	cols_iterators=  params.pop( 'moldb_cols_iterators');
+	fname = params.pop('moldb_fname');
+	noprint = params.pop('moldb_noprint');
+
+
+	#needed for buildImplementation!! 
+	for k in noprint.keys():
+		params[k] = noprint[k];
+
+	visited={}
+	m = buildImplementation(params,prototype,visited);
+	
+	if 'dummy' in m.parameters:
+		m.parameters.pop('dummy');
+
+	folder = root +'/' + m.getRef();
+
+	try:
+		f = open(folder + '/' + fname);
+		data=f.read().strip();
+		f.close();
+	except IOError:
+		data ='';
+
+	if len(data)==0:
+		data='NaN'
+
+
+	sys.stdout.write( str(data)+'\t' );
+
+
+
+def printRow(data):
+	rows=data['moldb_rows'];
+
+	for k in rows:
+		sys.stdout.write("k="+k+"\n");
+		sys.stdout.write("DATA!!!"+str(data[k])+"\n");
+
+		sys.stdout.write(data[k].value);
+		sys.stdout.write('\t');
+
+
+	cols=data['moldb_cols'];
+	cols_iterators=data['moldb_cols_iterators'];
+	
+	#print cols
+	#print cols_iterators
+
+	iterate_over_lists(cols,cols_iterators,printCol,data);
+
+	sys.stdout.write('\n');
+
+
+
+if __name__ == '__main__':
+	
+	opts,args=gnu_getopt(sys.argv[1:],'');
+	
+	if len(args)<4:
+		sys.stderr.write(usage);
+		quit()
+
+#	Project=args[0];	
+	chain_file=args[0];
+#	methodID=args[2];
+
+	
+	rows=args[1].split(',')
+	cols=args[2].split(',')
+	fname=args[3];
+
+	ch=Chain(chain_file);
+
+	Project = ch.project;
+	methodID = ch.runMethod;
+
+	d=ch.getMethodsDict();
+	method = d[methodID];
+
+	if len(args)>=5:
+		parseXparam(args[4],method);
+
+
+	rows_iterators=[];
+	cols_iterators=[];
+
+	for k in rows:
+		rows_iterators.append(method.iterators[k]);
+
+	for k in cols:
+		cols_iterators.append(method.iterators[k]);
+
+#	for k in method.iterators.keys():
+#		if k in rows:
+#			rows_iterators.append(method.iterators[k]);
+#		elif k in cols:
+#			cols_iterators.append(method.iterators[k]);
+#		elif len(method.iterators[k])==1:
+#			cols_iterators.append(method.iterators[k]);
+#			nonprint.append(k);
+#		else:
+#			raise Exception('Method key' + k +' is neither in rows nor in cols and has more than 1 value');
+
+
+#	print rows_iterators
+#	print cols_iterators		
+#	print nonprint
+	noprint={};
+	for k in method.iterators.keys():
+		if k in cols or  k in rows: continue
+		if len(method.iterators[k])>1:
+			raise Exception('Parameter '+k+' is not in rows/cols, but has more than 1 value (' + str(method.iterators[k]) +')');
+		noprint[k] = method.iterators[k][0];
+
+
+	root = os.getenv('MOLDB_PROJECTS')+'/'+Project+'/Methods';
+
+	xparam = {'moldb_prototype':method,
+		  'moldb_root':root,
+		  'moldb_rows':rows,
+		  'moldb_cols':cols,
+		  'moldb_cols_iterators':cols_iterators,
+		  'moldb_fname':fname,
+		  'moldb_noprint':noprint
+		}
+
+	#header
+	for r in rows:
+		sys.stdout.write( r+'\t' )
+
+	
+	iterate_over_lists(cols,cols_iterators,printHeader,xparam);
+	sys.stdout.write('\n');
+
+	#data
+	iterate_over_lists(rows,rows_iterators, printRow, xparam )
+	
+
+

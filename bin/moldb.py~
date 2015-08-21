@@ -1,0 +1,1202 @@
+# Volodymyr P Sergiievskyi,  voov.rat@gmail.com
+
+from UserDict import UserDict
+from UserList import UserList
+from inspect import getmembers
+from sets import Set
+from iterate_over_lists import iterate_over_lists
+from math import sqrt
+from Prime import Prime
+
+#
+# Parses SWITCH statement.
+# Returns the list of all different combinations of parameters
+#
+# EXAMPLE:  SWITCH
+#			2 CASES
+#				CASE 1
+#				2 RECORDS
+#					a = LIST 2 5 4 (default)
+#					b = FILE a.txt
+#				ENDCASE
+#
+#				CASE 2
+#				1 RECORD
+#					c = LIST 2 (default) 8 6
+#				ENDCASE
+#			ENDSWITCH
+#
+#		will return [ {a: LIST 2 5 4, b: LIST a.txt1rec atxt2rec...},{c:LIST 2 8 6}]
+#		here LIST means DefList (see moldb.py)
+#
+
+
+class Params:
+	params = {}
+
+
+def parseSwitch(lines,currline):
+	
+	currline = skipEmptyLines(lines,currline);
+	
+	# SWITCH
+	words = lines[currline].split();
+	if words[0]!='SWITCH':
+		raiseException(currline,'SWITCH expected');
+
+	# n CASES
+	currline = skipEmptyLines(lines,currline+1);
+	words = lines[currline].split();
+	if len(words)<2 or words[1]!='CASES':
+		raiseException(currline,'<number> CASES expected');
+
+	try:
+		Ncase = int(words[0]);
+	except ValueError:
+		raiseException(currline,'<number> CASES is expected (but not valid number '+words[0] +' given)');
+
+
+	params_variety = [];
+	param_names=[];
+
+	for i in range(Ncase):
+		currline = skipEmptyLines(lines,currline+1);
+		currline,sub_param_variety,sub_param_names = parseCase(lines,currline);
+
+		#print 'sub_param_variety:'+str(sub_param_variety)
+		# sub_param_variety is a List(!) of parameters, ( because switches can be nested !!! )
+		params_variety += sub_param_variety;
+		param_names += sub_param_names;
+
+	currline = skipEmptyLines(lines,currline+1);
+
+	words = lines[currline].split();
+	if words[0]!='ENDSWITCH':
+		raiseException(currline,'ENDSWITCH expected');
+
+	return currline,params_variety,param_names
+
+#
+# Parses statement 
+#  CASE  <name>
+#     PArameters
+# ENDCASEr
+# 
+# returns a param variety
+#
+def parseCase(lines,currline):
+	currline = skipEmptyLines(lines,currline);
+	words = lines[currline].split();
+
+	if len(words)<2 or words[0]!='CASE':
+		raiseException(currline,'CASE <Name> is expected');
+
+	case_name = words[1];
+
+	currline=skipEmptyLines(lines,currline+1);
+
+	currline,param_variety,param_names = parseParameters(lines,currline)
+
+	new_names = [];
+
+	for name in param_names:
+		new_names.append(case_name+name);
+
+	param_names = new_names;
+
+	currline=skipEmptyLines(lines,currline+1);
+
+	words=lines[currline].split();
+
+	if words[0]!='ENDCASE':
+		raiseException(currline,'ENDCASE expected');
+
+	return currline,param_variety,param_names
+
+
+# Parses the following structure:
+#
+#  N RECORDS
+#
+#	name1=value1
+#	name2=value2
+#
+#	SWITCH
+#		...
+#	ENDSWITCH
+#
+#	name3=value3
+#
+#
+# NOTE! SWITCH is counted as one record! 
+#
+#  returns the currline,param_varitely (list of parameters dictionaries for different SWITCH options!)
+#
+def parseParameters(lines,currline):
+
+	currline = skipEmptyLines(lines,currline);
+	
+	words=lines[currline].split();
+
+	if len(words)<2 or words[1]!='RECORD' and words[1]!='RECORDS':
+		raiseException(currline,'<number> RECORDS expected');
+
+	NRec = int(words[0]);
+
+	param_variety = [{}];
+	param_names = [''];
+
+	for i in range(NRec):
+		currline = skipEmptyLines(lines,currline+1);
+
+		tokens = lines[currline].split();
+		if tokens[0] == 'SWITCH':
+			currline,sub_param_variety,sub_param_names = parseSwitch(lines,currline);
+
+			new_variety = [];
+
+			for oldprm in param_variety:
+				for newprm in sub_param_variety:
+					joinprm = dict(oldprm);
+					joinprm.update(newprm);
+					new_variety.append(joinprm);
+				
+					
+			param_variety = new_variety;
+
+			new_names = [];
+			for oldname in param_names:
+				for newname in sub_param_names:
+					new_names.append(oldname+'_' + newname);
+
+			param_names = new_names;
+			
+		else:
+			words = lines[currline].split('=');
+
+			param = words[0].strip().lower();
+		
+			values = words[1].split();
+			keyword = values[0];
+
+			if keyword=='LIST':
+				value = DefList(values[1:]);
+			elif keyword=='FILE':
+				f=open(values[1]);
+				file_values = [ str2val(s.strip()) for s in f.read().splitlines()];
+				f.close();
+
+				value = DefList(file_values);
+			else:
+				value = DefList(values);
+#				value = str2val(values[0]);
+
+			for prm in param_variety:
+				prm[param]=value;
+
+	return currline,param_variety,param_names;
+
+
+class Data: 
+	def __repr__(self):
+		members=getmembers(self);
+		s='DATA(';
+		for m in members:
+			if m[0][0]=='_': continue
+			s+=m[0]+':'+str(m[1])+';';
+		s+=')'			
+		return s;
+
+def checkPrime(N):
+	for d in range(2,int(sqrt(N))+1):
+		if N % d == 0:
+			return False;
+	return True;
+		 
+def primeLessThan(N):
+	while N>2:
+		if checkPrime(N): return N;
+		N-=1;
+	
+	return 2;
+
+
+BIG_INT = primeLessThan(2**30);
+
+#convert string to value (string / int / float)
+def str2val(s):
+	try:
+		x=int(s);
+	except Exception:
+		try:
+			x=float(s);
+		except Exception:
+			x=s;
+	return x;
+
+
+class Hashable:
+	def getHash(self):
+		raise Exception(str(self) + " : getHash need to be implemented in derived classes");
+		
+
+def addHash(a,b):
+	return int(a*b % BIG_INT);
+
+def getHash(x):
+	if type(x) is str: 
+		s=x;
+	elif  type(x) is int: 
+		s=str(x);
+	elif type(x) is float:
+		s=str(int(x*1000000))
+	elif isinstance(x,Hashable):
+		return x.getHash();
+	else:
+		raise Exception('getHash: Hash of  ' + str(x) +' is unknown')
+
+
+	if "NewHash" in Params.params:
+
+
+		if(len(Prime.primes)==0):
+			Prime.init();
+
+		S=1;
+		for i in range(len(s)):
+			S = addHash( S, Prime.getPrime(256*i + ord(s[i])) );
+#			S = addHash( S, Prime.getPrime(i+256) );
+
+#		print "NEW HASH("+s + ")="+str(S)
+
+		
+	else:
+#		print "OLD HASH"
+
+		S=1;
+		for i in range(len(s)):
+			S = addHash( S, ord(s[i]) );
+
+	return S;
+
+
+class HashDict(UserDict,Hashable):
+	def getHash(self):
+		S=1;
+
+		if "NewHash" in Params.params:
+		
+			#ss=""
+
+			for key in self.keys():
+				V = getHash(self[key]);
+				S = addHash(S, getHash( getHash(key) + V ) );
+
+			#	ss+="->"+str(S);
+
+			#print "HASH DICT: "+ss
+
+		else:
+
+			for key in self.keys():
+	
+				S=addHash(S,getHash(key));
+				S=addHash(S,getHash(self[key]));
+
+		return S;
+
+		
+			
+class HashList(UserList,Hashable):
+	def getHash(self):
+		S=1;
+		for i in range(len(self)):
+			S = addHash(S, getHash(self[i]));
+		return S;
+
+
+class DefList:   # list with the default value
+	def __init__(self,words=None):
+		self.data=[];
+	
+		if words!=None: self.fromWords(words);
+
+	def fromWords(self,words):
+		
+		n=0;
+		for w in words:
+			if w.lower() != '(default)':
+				d=Data();
+				d.value = str2val(w);
+				d.isDefault = False;
+				self.data.append(d);
+				n+=1;
+			else:
+				self.data[n-1].isDefault=True;
+
+	def __repr__(self):
+		s='LIST ';
+		for d in self.data:
+			s+=str(d.value)+' ';
+			if d.isDefault:
+				s+='(default) ';
+
+		return s;
+	
+	# EMULATE LIST OBJET!! 		
+	def __len__(self):
+		return len(self.data)
+
+	def __getitem__(self, key):
+		return self.data[key];
+
+
+	def __setitem__(self, key, value):
+		self.data[key]=value;
+
+
+	def __delitem__(self, key):
+		return self.data.__delitem__(key);
+
+
+	def __iter__(self):
+		return self.data.__iter__();
+
+ 
+	def __reversed__(self):
+		return self.data.__reversed__();
+
+
+	def __contains__(self, item):
+		return item in self.data;
+
+					 
+
+class Source(Hashable):
+	def __init__(self,name,description):
+		self.name=name;
+		self.description=description;
+		
+	def getHash():
+		return getHash(self.name) + getHash(self.description);
+
+
+# skips empty/comment lines and return the number of the first non-empty line after first
+def skipEmptyLines(lines,first):
+	currline=first;
+	while True:
+		words=lines[currline].split();
+		if len(words)>0 and words[0][0]!='#': break
+		currline+=1;
+		if currline>=len(lines): break;
+		
+	return currline;
+
+	
+def raiseException(currline,msg):
+	raise Exception(" line "+str(currline+1)+" : " + msg);
+
+
+
+def parseBeginBlock(lines,currline,blockName):
+	#BLOCK DEPENDENCIES
+	currline=skipEmptyLines(lines,currline);
+	words=lines[currline].split();
+	if len(words)<2 or words[0]!='BLOCK' or words[1]!=blockName:
+		raiseException(currline,'BLOCK '+blockName+' expected');
+
+	#N RECORDS
+	currline=skipEmptyLines(lines,currline+1);
+	words=lines[currline].split();
+	if len(words)<2 or words[1]!='RECORD' and words[1]!='RECORDS':
+		raiseException(currline,'<number> RECORDS expected');	
+	Nrec=int(words[0]);
+
+	result=Data()
+	result.currline=currline;
+	result.Nrec = Nrec;
+	return result;		
+
+
+def parseEndBlock(lines,currline):
+	
+	currline=skipEmptyLines(lines,currline);
+	words=lines[currline].split();
+	if len(words)<1 or words[0]!='ENDBLOCK':
+		raiseException(currline,'ENDBLOCK excpected');
+
+	return currline;
+
+
+class ParametersBlock:
+	def __init__(self):
+		self.parameters={};
+
+	def parseLines(self,lines,currline):
+		#BLOCK PARAMETERS
+		
+		words = lines[currline].split();
+		if len(words)<2 or words[0] != 'BLOCK' or words[1]!='PARAMETERS':
+			raiseException(currline,'BLOCK PARAMETERS expected');
+
+		currline,params,param_names = parseParameters(lines,currline+1);
+
+		self.parameters = params;
+		self.param_names = param_names;
+
+#		data = parseBeginBlock(lines,currline,'PARAMETERS');	
+#		currline = data.currline;
+#		NRec = data.Nrec;
+#		self.parameters={};
+#
+#		for i in range(NRec):
+#			currline = skipEmptyLines(lines,currline+1);
+#			words = lines[currline].split('=');
+#
+#			param = words[0].strip().lower();
+#			
+#			values = words[1].split();
+#			keyword = values[0];
+#
+#			if keyword=='LIST':
+#				value = DefList(values[1:]);
+#			elif keyword=='FILE':
+#				f=open(values[1]);
+#				file_values = [ str2val(s.strip()) for s in f.read().splitlines()];
+#				f.close();				
+#	
+#				value = DefList(file_values);
+#			else:
+#				value = str2val(values[0]);
+#		
+#			self.parameters[param]=value;
+
+		currline = parseEndBlock(lines,currline+1);
+		return currline;
+
+class DependenciesBlock:
+	def __init__(self):
+		self.dependencies=[];
+
+	def parseLines(self,lines,currline):
+		#BLOCK DEPENDENCIES		
+		data=parseBeginBlock(lines,currline,'DEPENDENCIES');
+		currline=data.currline;
+		NRec = data.Nrec;
+
+		#format:  METHODID <id> AS <name>
+
+		for i in range(NRec):
+			currline = skipEmptyLines(lines,currline+1);
+			words = lines[currline].split();		
+		
+			if len(words)<4 or words[0]!='METHOD' and words[0]!='SOURCE' or words[2]!='AS':
+				raiseException(currline,'METHOD/SOURCE <id> AS <name> expected');
+
+			data={};
+			data['id'] = words[1];
+			data['name'] = words[3];
+			self.dependencies.append(data);
+				
+		#ENDBLOCK
+		currline=parseEndBlock(lines,currline+1);
+		return currline;
+
+class Script:
+	def __init__(self):
+		self.text = '';
+		self.name = '';
+	
+	def parseLines(self,lines,currline):
+		currline = skipEmptyLines(lines,currline);
+
+		words = lines[currline].split();
+
+		if len(words)<2 or words[0]!='SCRIPT':
+			raiseException(currline,'SCRIPT <name> expected');
+
+		self.name = words[1];
+		self.text = '';
+		while True:
+			currline+=1;
+			words = lines[currline].split();
+			if len(words)>0 and words[0]=='ENDSCRIPT': break;
+
+			self.text += lines[currline];
+
+		return currline;		
+		
+	def __repr__(self):
+		return '<'+self.name+'>:'+self.text;
+
+
+class ScriptsBlock:
+	def __init__(self):
+		self.scripts=[];
+
+	def parseLines(self,lines,currline):
+		data = parseBeginBlock(lines,currline,'SCRIPTS');
+	
+		currline = data.currline;
+		NRec = data.Nrec;
+
+		for i in range(NRec):
+			currline = skipEmptyLines(lines,currline+1);
+			script = Script();
+			currline = script.parseLines(lines,currline);
+			self.scripts.append(script);
+
+		currline = parseEndBlock(lines,currline+1);
+		return currline;
+
+class Method(Hashable):
+
+	def __init__(self,name=''):
+		self.name=name;
+		self.dependencies=HashList();
+		self.parameters=HashDict();
+		self.scripts=None;
+		self.isPrototype = False;
+		self.iterators = {};
+
+	def clone(self):
+		m = Method(self.name);
+		m.dependencies = self.dependencies;
+		m.parameters = self.parameters;
+		m.isPrototype = self.isPrototype;
+		m.iterators = self.iterators;
+		m.scripts = self.scripts;
+		m.blocks = self.blocks;
+		m.parseID = self.parseID;
+
+		return m
+
+	def setParameters(self,params):
+		self.parameters= HashDict(params);
+
+	def addParam(self,name,value):
+		self.parameters[name] = value;
+
+	def addDependency(dep):
+		if isinstance(dep,Source) or isinstance(dep,Method):
+			self.dependencies.append(input);
+		else:
+			raise Exception("Method.addInput: dependency  must be either Source or Method");
+
+	def getHash(self):
+		if self.isPrototype:
+			return self.parseID;
+		else:
+			return addHash( getHash(self.name) , getHash(self.parameters) );
+
+	def getRef(self):
+		if not 'molecule' in self.parameters.keys():
+			mol='NoMolecule'
+		else: 
+			mol=self.parameters['molecule'];
+
+		return mol +'/' + self.name +'/'+ str(self.getHash());		
+		
+	def printParams(self,params,base_indent='\t'):
+		s=""
+		s+=base_indent+str(len(params)) + ' RECORDS\n';
+
+		sortKeys = list(params.keys());
+		sortKeys.sort();
+		for k in sortKeys:
+#			s+=k+'\n'
+			s+=base_indent+'\t'+k+' = '+str(params[k])+'\n'
+
+		return s
+
+	def toString(self):
+		s='BEGIN METHOD '+self.name+'\n';
+		s+='\tID '+str(self.getHash())+'\n';
+
+		#DEPENDENCIES
+		s+='\tBLOCK DEPENDENCIES\n';
+		s+='\t'+str(len(self.dependencies)) + ' RECORDS\n';
+		for dep in self.dependencies:
+			s=s+'\t\tMETHOD '+str(dep.method.getHash())+' AS '+dep.nickname+'\n';
+		s+='\tENDBLOCK DEPENDENCIES\n';
+
+		#PARAMETERS
+		s+='\tBLOCK PARAMETERS\n';
+
+
+		if isinstance(self.parameters,list):
+			s+='\t1 RECORD\n'
+			s+='\tSWITCH\n'
+			s+='\t'+str(len(self.parameters))+' CASES\n'
+			
+			for i in range(len(self.parameters)):
+				params = self.parameters[i];
+				param_name = self.param_names[i];
+				s+='\t\tCASE '+param_name+'\n'
+				s+=self.printParams(params,'\t\t');
+				s+='\t\tENDCASE\n'
+			s+='\tENDSWITCH\n'
+		else:
+			s+=self.printParams(self.parameters)
+
+
+		s+='\tENDBLOCK PARAMETERS\n'
+			
+			
+#		sortKeys = list(self.parameters.keys());
+#		sortKeys.sort();
+#		for k in sortKeys:
+#			s+=k+'\n'
+#			s+='\t\t'+k+' = '+str(self.parameters[k])+'\n'
+#		s+='\tENDBLOCK PARAMETERS\n'	
+
+		#SCRIPTS
+		s+='\tBLOCK SCRIPTS\n';
+		s+='\t'+str(len(self.scripts))+' RECORDS\n';
+		for script in self.scripts:
+			s+='\t\tSCRIPT '+script.name+'\n'
+			s+=script.text;
+			s+='\t\tENDSCRIPT '+script.name+'\n';
+
+		s+='\tENDBLOCK SCRIPTS\n'
+
+		s+='END METHOD ' + self.name+'\n';
+		return s;
+
+	def parseLines(self,lines,first):
+		currline=skipEmptyLines(lines,first);
+	
+		# BEGIN METHOD <name>	
+		words = lines[currline].split();
+		if len(words)<3 or words[0]!='BEGIN' or words[1]!='METHOD':
+			raiseException(currline,'BEGIN METHOD <name> expected');
+		self.name=words[2];
+
+		# HASH <hash>
+		currline=skipEmptyLines(lines,currline+1);
+		words = lines[currline].split();
+		if len(words)<2 or words[0]!='ID':
+			self.raiseException(currline,"ID <id> expected",)
+
+		self.parseID=words[1];
+		#BLOCKS
+
+		self.blocks={'DEPENDENCIES':DependenciesBlock(),
+				'PARAMETERS':ParametersBlock(),
+				'SCRIPTS':ScriptsBlock() };
+
+
+		#print currline, lines[currline],lines[currline+1]		
+
+		
+
+		while True:
+			currline = skipEmptyLines(lines,currline+1);
+			words = lines[currline].split();
+		#	print '!!!'+str(currline) +'!'+str(words)
+			if words[0]=='BLOCK':
+				if len(words)<2 or not words[1] in self.blocks.keys():
+					raiseException(currline,'BLOCK [DEPENCENCIES|PARAMETERS|SCRIPTS] expected');
+	 			else:
+					currline=self.blocks[words[1]].parseLines(lines,currline);
+			else: 
+				break;
+
+		#print 'eM'+str(currline)+lines[currline]
+
+		
+		if len(self.blocks['PARAMETERS'].parameters) == 1:
+			self.parameters = HashDict(self.blocks['PARAMETERS'].parameters[0]);
+		else:
+			self.parameters = self.blocks['PARAMETERS'].parameters;
+			self.param_names = self.blocks['PARAMETERS'].param_names;
+		
+		self.scripts = self.blocks['SCRIPTS'].scripts;
+	
+	
+		#END METHOD
+		currline=skipEmptyLines(lines,currline);
+		words=lines[currline].split();
+		if len(words)<2 or words[0]!='END' or words[1]!='METHOD':
+			raiseException(currline,'END METHOD excpected');
+
+		return currline;
+
+	def getIterators(self,iterators=None,visited=None):
+		
+		if iterators == None:
+			iterators = {}
+
+		if visited == None:
+			visited=Set([])
+
+		if self.parseID in visited:
+			return iterators
+
+		visited.add(self.parseID);
+
+		for d in self.dependencies:
+			d.method.getIterators(iterators,visited)
+
+		for param in self.parameters.keys():
+			iterators[param] = self.parameters[param];	
+
+
+		return iterators
+
+
+		
+
+	def createFolders(self,iterators):
+		pass
+		
+		
+
+	def __repr__(self):
+		return self.toString();
+
+
+class Chain(Hashable):
+	def __init__(self,fname=None):
+		self.methods=HashList();
+		
+		
+		self.isPrototype = False;
+		self.runMethod = None;
+
+		if fname != None:
+			f=open(fname);
+			lines=f.readlines();
+			f.close();
+
+			self.parseLines(lines,0)
+
+	def clone(self):
+		ch = Chain();
+		ch.isPrototype=self.isPrototype;
+		ch.runMethod = self.runMethod;
+		ch.methods = [];
+		ch.project = self.project;
+
+		for m in self.methods:
+			ch.methods.append(m.clone());
+
+		return ch;
+
+	def getMethodsDict(self):
+		d={};
+		for m in self.methods:
+#			if self.isPrototype:
+			pid = m.parseID;
+#			else:
+#				pid = str(m.getHash());
+			d[pid] = m;
+
+		return d
+		
+
+	def fromMethods(self,methods,runMethod,project,isPrototype=False):
+		
+		self.methods = HashList(methods);
+		self.isPrototype = isPrototype;
+		self.runMethod = runMethod;
+		self.project = project;
+		
+
+	def getHash():
+		return getHash(self.methods);
+
+	def parseLines(self,lines,currline):
+
+		# PROJECT Name
+		currline = skipEmptyLines(lines,currline);
+		words = lines[currline].split();
+
+		if len(words)<2 or words[0]!='PROJECT':
+			raiseException(currline,'PROJECT Name expected');
+
+		self.project = words[1];
+
+		#BEGIN CHAIN (PROTOTYPE|IMPLEMENTATION)
+		currline = skipEmptyLines(lines,currline+1);
+		words = lines[currline].split();
+	
+		if len(words)<3 or words[0]!='BEGIN' or words[1]!='CHAIN' or words[2]!='PROTOTYPE' and words[2]!='IMPLEMENTATION':
+			raiseException(currline,'BEGIN CHAIN PROTOTYPE|IMPLEMENTATION expected');
+
+		self.isPrototype = (words[2]=='PROTOTYPE');
+
+		# <num> METHODS
+		currline=skipEmptyLines(lines,currline+1);
+		words = lines[currline].split();
+	
+		if len(words)<2 or words[1]!='METHOD' and words[1]!='METHODS':
+			raiseException(currline,'<num> METHODS expected');
+
+		N = int(words[0]);
+
+		#RUN METHOD <id>
+		currline = skipEmptyLines(lines,currline+1);
+		words = lines[currline].split();		
+		
+		if len(words)<3 or words[0]!='RUN' or words[1]!='METHOD':
+			raiseException(currline,'RUN METHOD <id> expected');
+
+		self.runMethod = words[2];
+
+
+		nextLine = skipEmptyLines(lines,currline+1);
+		words = lines[nextLine].split();
+
+		if words[0]=='USE':
+
+			prmline = lines[nextLine].lstrip()[3:];
+			prmwords = prmline.split(',');
+			for prmword in prmwords:
+				prmparts = prmword.split('=');
+
+				if len(prmparts)==1:
+					val=True;
+				else:
+					val=prmparts[1].strip();
+
+				nam = prmparts[0].strip();
+
+				Params.params[nam]=val;
+			
+			currline = nextLine;
+
+
+		for i in range(N):
+			currline = skipEmptyLines(lines,currline+1);
+			if currline>=len(lines): break
+			m=Method();
+			
+			words = lines[currline].split();
+			if words[0] == 'FROM':  # FROM file.chain IMPORT METHOD methodID  AS NewMethodID 
+			
+				if len(words) < 7 or words[2]!='IMPORT' or words[3]!='METHOD' or words[5]!='AS':
+					raiseException(currline,'FROM file.chain IMPORT METHOD methodID  AS NewMethodID expected');
+			
+				file_name = words[1];
+				method_id = words[4];
+				method_alias = words[6];
+
+				ch = Chain(file_name);
+				d = ch.getMethodsDict();
+				
+				m = d[method_id];
+				m.parseID = method_alias;
+				
+
+			else:
+				currline = m.parseLines(lines,currline);
+
+			self.methods.append(m)
+
+			m.isPrototype = self.isPrototype;
+
+		#END CHAIN
+		currline=skipEmptyLines(lines,currline+1);
+		words=lines[currline].split();
+		if len(words)<2 or words[0]!='END' or words[1]!='CHAIN':
+			raiseException(currline,'END CHAIN expected');
+
+
+		self.linkDependencies();
+
+		return currline;
+
+	def linkDependencies(self):
+		
+		idtab={};
+		for m in self.methods:
+			idtab[m.parseID] = m;
+		
+		for m in self.methods:
+			if not 'DEPENDENCIES' in m.blocks:
+				raise Exception('Method ' + m.name +' id '+str(m.parseID) +' has no block DEPENDENCIES');
+
+			m.dependencies = [];
+			for d in m.blocks['DEPENDENCIES'].dependencies:	
+				mid = d['id'];			
+				if not mid in idtab:
+					raise Exception('Method '+m.name+' id '+str(m.parseID) +' Dependency '+str(mid)+' refers to unknown method');
+
+				data=Data();
+
+				data.method = idtab[mid];
+				data.nickname = d['name'];
+
+				m.dependencies.append(data);
+
+		self.updateIterators()
+
+	def updateIterators(self):
+		for m in self.methods:
+			m.iterators = m.getIterators();
+
+	def toString(self):
+		s='PROJECT '+self.project + '\n';
+
+		chainType = ( 'PROTOTYPE' if self.isPrototype else 'IMPLEMENTATION' );
+
+		s+='BEGIN CHAIN ' + chainType + '\n';
+		s+=str(len(self.methods)) + ' METHODS\n';
+		s+='RUN METHOD '+str(self.runMethod)+'\n';
+	
+		if len(Params.params)>0:
+			s+='USE '
+			K = Params.params.keys();
+			L=len(K);
+			for i in range(L):
+				prm = K[i];
+				if Params.params[prm] == True:
+					s+=prm
+				else:
+					s+=prm+'='+str(Params.params[prm])
+
+				if i<L-1:
+					s+=','
+				else:
+					s+='\n'
+
+		s+='\n'
+
+		for m in self.methods:
+			s+=m.toString();
+
+		s+='\nEND CHAIN '+chainType +'\n'
+
+		return s;
+
+		
+
+	def __repr__(self):
+		return self.toString();
+
+
+class SwitchChain(Chain):
+
+	def updateIterators(self):
+		pass
+
+	def generateChains(self,method=None):
+		
+		if method==None:
+			d = self.getMethodsDict();
+			method = d[self.runMethod];
+
+#		d = self.getMethodsDict();
+		sub_chains = [];
+		sub_names = [];
+		for dep in method.dependencies:
+			dep_chains,dep_names = self.generateChains(dep.method);
+			sub_chains += dep_chains;
+			sub_names += dep_names;
+	
+		last_methods = [];
+		last_method_names = [];
+
+		if isinstance(method.parameters,list):
+			for params in method.parameters:
+				m = method.clone();
+				m.parameters = params;
+				last_methods.append(m);
+			last_method_names = method.param_names;
+		else:
+			last_methods.append(method);
+			last_method_names = [''];
+
+		chains=[];
+		chain_names=[];
+
+		if len(sub_chains)==0:
+			new_ch = Chain();
+			new_ch.project = self.project;
+			new_ch.isPrototype=True;
+			sub_chains.append(new_ch);
+			sub_names.append('');
+
+		for mid in range(len(last_methods)):
+			m = last_methods[mid];
+			mname = last_method_names[mid];
+			for chid in range(len(sub_chains)):
+				ch = sub_chains[chid];
+				chname = sub_names[chid];
+				new_ch = ch.clone();
+				new_ch.methods.append(m.clone());
+				new_ch.linkDependencies();
+				new_ch.runMethod = m.parseID;
+				chains.append(new_ch);
+				chain_names.append(chname+mname);
+
+		return chains,chain_names;
+
+#  we have the prototype, which has lists of values
+#  parameters are the concrete values of [ALL] values of the prototype and its dependencies
+#  buildImplementation creates the new method, which concrete values of the values ( and also - with correct dependencies)
+def buildImplementation(parameters,prototype,visited=None):
+	
+	if visited==None: visited = {};
+		
+	
+	if prototype.parseID in visited: return visited[prototype.parseID];
+
+	m=Method(prototype.name);
+
+	visited[prototype.parseID] = m;
+
+	m.dependencies = [];
+	for d in prototype.dependencies:
+
+		subparams={};
+		for p in d.method.iterators.keys():
+			subparams[p] = parameters[p];
+			
+		imp = buildImplementation(subparams,d.method,visited);
+		
+		data = Data();
+		data.method = imp;
+		data.nickname = d.nickname;
+	
+		m.dependencies.append(data);
+
+	m.parameters = HashDict();
+
+	for p in parameters.keys():
+		if not parameters[p].isDefault: 
+			m.parameters[p] = parameters[p].value;
+
+	m.scripts = prototype.scripts;
+	m.parseID = prototype.parseID;
+		
+
+	return m
+
+
+#
+# Parses the xparam_str in format  name1=value1,name2=value2,...
+# Adds / replaces parameters in the given method
+#
+def parseXparam(xparam_str,method,chain=None):
+
+#	print xparam_str
+#	print sys.argv
+
+	xparam_tokens = xparam_str.split(',');
+	#		print xparam_tokens
+
+
+	for tok in xparam_tokens:
+
+		words = tok.split('=');
+
+		if(len(words))<2: 
+			raise Exception('name=value expected in extra arguments, but '+tok+' is given');
+
+		name=words[0].strip().lower();
+	#			print words		
+
+		wwords=words[1].split();
+
+		if wwords[0]=='LIST':
+			#print '!!LIST!!!'+str(wwords[1:])
+			method.parameters[name]=DefList(wwords[1:]);
+		elif wwords[0]=='FILE':
+#			print xparam_str
+			f=open(wwords[1]);
+			lines=f.read().splitlines();
+			f.close();
+
+			method.parameters[name]=DefList(lines);
+		else:
+			value = words[1].strip();
+
+			isDefault = False;
+			
+			v=str2val(value);
+
+			if chain != None:
+				mlist = chain.methods;
+			else:
+				mlist = [method];
+
+			for m in mlist:
+				if name in m.parameters:
+					for dat in m.parameters[name]:
+						if dat.value == v and dat.isDefault:
+							isDefault=True;
+
+
+			if not isDefault:
+				method.parameters[name]=DefList([value]);
+			else:
+				method.parameters[name]=DefList([value,'(default)']);
+
+	method.iterators=method.getIterators();
+
+
+def printImp(data):
+
+	params = dict(data)
+
+	prototype = params.pop('moldb_prototype');
+	root = params.pop('moldb_root');
+
+	visited={}
+	m = buildImplementation(params,prototype,visited);
+	
+	meth = [];
+
+	for pid in sorted(visited.keys()):
+		meth.append(visited[pid]);
+	
+
+#	os.
+
+	print 'Path: '+root + '/' + m.getRef();
+
+	chain = Chain();
+	chain.fromMethods(meth,m.getHash(),False);
+	print chain.toString();
+
+
+
+def createFolders(data):
+	
+	params = dict(data);
+	prototype = parms.pop('moldb_prototype');
+	root = params.pop('moldb_root');
+
+	
+
+		
+
+
+if __name__ == '__main__':
+	f=open('1.txt');
+	lines=f.readlines();
+	f.close();
+	chain = Chain();
+	chain.parseLines(lines,0);
+
+	chain.linkDependencies()
+
+	print chain.toString()
+
+	print 'BIG_INT = '+str(BIG_INT);
+
+	for m in chain.methods:
+		print m.name+str(m.iterators)
+
+	m=chain.methods[1];
+
+	print m.iterators.keys()
+	print m.iterators.values()
+
+
+
+	iterate_over_lists(m.iterators.keys(),m.iterators.values(),printImp,{'moldb_prototype':m,'moldb_root':'.'})
+
+

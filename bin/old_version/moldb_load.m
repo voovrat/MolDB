@@ -1,0 +1,44 @@
+function Values = moldb_load(Refs,fname,loadfn)
+
+N = length(Refs);
+Values = cell(N,1);
+
+if nargin<3
+    loadfn=@load;
+end
+
+for i=1:N
+
+    folder = Refs{i}.folder;
+
+    f=fopen([ folder '/' fname ]);
+
+    if f>0
+        s= textscan(f);
+        fclose(f);
+
+        if isempty(s)
+            data = NaN;
+        else
+    
+    
+
+            data = loadfn([ folder '/' fname ]);
+
+            if isstruct(data) 
+    
+                fld = fieldnames(data);
+                data = data.(fld(1));
+            end
+
+        end
+
+    else
+
+        data = NaN;
+
+    end
+
+    Values{i} =  data ;
+
+end

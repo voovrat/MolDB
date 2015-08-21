@@ -1,0 +1,32 @@
+xyz=$1
+
+if [ $# -lt 2 ]; then
+	 basis=6-311G;
+else
+	basis=$2
+fi
+
+
+ch=$(tail -n+3 $xyz | gawk '{print $1}' | sed s:O:-2:g | sed s:H:1:g )
+
+chp=$(echo $ch | tr ' ' + )
+chtot=$(echo print $chp | python)
+
+echo title system
+echo start system
+echo echo
+echo geometry noautoz units angstrom
+echo    symmetry c1
+tail -n+3 $xyz
+echo end
+echo 'basis "ao basis"'
+echo    O library $basis
+echo    H library $basis
+echo    bqO library O $basis
+echo    bqH library H $basis
+echo end
+
+echo charge $chtot
+echo   'dft; end'
+echo task dft energy
+

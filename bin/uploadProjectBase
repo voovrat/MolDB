@@ -1,0 +1,67 @@
+#!/bin/bash
+
+#
+#
+#  uploadBase Porject server remote_moldb_root    password_file
+#  
+
+if [ $# -lt 4 ]; then
+
+echo "Usage:  uploadProjectBase Project server remote_root password_file"
+
+
+exit
+
+fi
+
+Project=$1
+server=$2
+remote_root=$3
+password_file=$4
+
+
+time=$(date +%Y-%m-%d_%H.%M)
+
+
+echo "Prototypes:"
+
+PrjFolder=$remote_root/Projects/$Project
+
+cd $MOLDB_PROJECTS/$Project
+
+sshpass -f $password_file ssh $server "mkdir -p $PrjFolder"
+
+echo "compressing prototypes..."
+
+tar -cf Prototypes_$time.tar Prototypes
+gzip Prototypes_$time.tar
+
+echo "copying prototypes"
+
+sshpass -f $password_file scp Prototypes_$time.tar.gz $server:$PrjFolder
+sshpass -f $password_file ssh $server "cd $PrjFolder; tar -xzf Prototypes_$time.tar.gz; rm -f Prototypes_$time.tar.gz"
+
+rm -f Prototypes_$time.tar.gz
+
+
+echo "Sources:"
+
+echo "compressing sources..."
+
+tar -cf Sources_$time.tar Sources
+gzip Sources_$time.tar
+
+echo "copying sources"
+
+sshpass -f $password_file scp Sources_$time.tar.gz $server:$PrjFolder
+sshpass -f $password_file ssh $server "cd $PrjFolder; tar -xzf Sources_$time.tar.gz; rm -f Sources_$time.tar.gz"
+
+rm -f Sources_$time.tar.gz
+
+
+
+
+
+
+
+

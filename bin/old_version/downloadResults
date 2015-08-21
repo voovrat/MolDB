@@ -1,0 +1,80 @@
+#!/bin/bash
+
+#
+#
+#  uploadBase Porject server remote_moldb_root    password_file
+#  
+
+if [ $# -lt 4 ]; then
+
+echo "Usage:  downloadResults Chain server remote_moldb_root password_file [xparam] "
+
+
+exit
+
+fi
+
+Chain=$1
+server=$2
+remote_root=$3
+password_file=$4
+K="'"
+
+if [ -n "$5" ]; then
+	xparam=$K$5$K
+else
+	xparam=""
+fi
+
+
+time=$(date +%Y-%m-%d_%H.%M)
+
+
+Project=$(cat $Chain | grep PROJECT | gawk '{print $2}')
+
+#command="moldb_getRef $Chain --noRoot $xparam | tr $'\n' ' '"
+#echo $command
+
+#exit
+
+Ref=$(moldb_getRef $Chain --noRoot $xparam | tr $'\n' ' ')
+
+cd $MOLDB_PROJECTS/$Project/Methods
+
+tarname=Results_of_${Chain}_at_$time.tar
+
+
+#tar -cf $tarname $Dep
+#gzip $tarname
+
+#echo "TAR FILE $tarname created."
+
+#exit
+
+
+MethodsFolder=$remote_root/Projects/$Project/Methods
+
+
+#sshpass -f $password_file ssh $server "mkdir -p $MethodsFolder"
+#pwd
+#echo sshpass -f $password_file scp $tarname.gz $server:$MethodsFolder
+
+echo "Compressing..."
+
+sshpass -f $password_file ssh $server "cd $MethodsFolder; tar -cf $tarname $Ref; gzip $tarname "
+
+echo "Downloading...:"
+
+sshpass -f $password_file scp $server:$MethodsFolder/$tarname.gz  . 
+
+echo "Extracting..."
+
+tar  -xzf $tarname.gz
+
+sshpass -f $password_file ssh $server "cd $MethodsFolder; rm $tarname.gz"
+rm $tarname.gz
+
+
+
+
+

@@ -1,0 +1,70 @@
+PROJECT Clusters
+
+BEGIN CHAIN PROTOTYPE
+1 METHODS
+RUN METHOD 1
+USE MD5
+
+BEGIN METHOD Source
+ID 1
+	BLOCK DEPENDENCIES
+	0 RECORDS
+	ENDBLOCK DEPENDENCIES
+
+	BLOCK PARAMETERS
+	3 RECORDS
+		molecule = FILE clusters.lst
+		proton = LIST T F 
+		prog = LIST fhaims runner
+	#	prog = LIST abinit nwchem gpaw
+	#	prog = LIST abinit nwchem lammps
+ 	ENDBLOCK PARAMETERS
+
+
+	BLOCK SCRIPTS
+	1 RECORDS
+		SCRIPT copy
+ 
+			echo $FOLDER
+
+ 			if [ $prog == fhaims ] && [ $proton == T ]; then
+			    dir=DFT_protonierte_cluster
+			    file=energy-DFT.dat
+			    SEP=' '
+			fi
+
+ 			if [ $prog == fhaims ] && [ $proton == F ]; then
+			    dir=DFT_neutrale_cluster
+			    file=energy-DFT.dat
+			    SEP='-'
+			fi
+
+ 			if [ $prog == runner ] && [ $proton == T ]; then
+			    dir=RuNNer-proton/RuNNer-prediction
+			    file=energy-NN.dat
+			    SEP=' '
+			fi
+
+ 			if [ $prog == runner ] && [ $proton == F ]; then
+			    dir=RuNNer-neutral/RuNNer-prediction
+			    file=energy-NN.dat
+			    SEP='-'
+			fi
+
+			cat $PROTOTYPES/Sinja/$dir/$file | grep "^$molecule$SEP" | gawk '{print $2}' > energy_Ha.dat
+
+			E_Ha=$(cat energy_Ha.dat)
+			echo 'print "%0.15f" % ('$E_Ha '*27.2113845657195)' | python >energy.dat 
+
+
+    		ENDSCRIPT
+
+
+	ENDBLOCK SCRIPTS
+
+
+
+END METHOD Source
+
+
+END CHAIN PROTOTYPE

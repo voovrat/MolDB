@@ -1,0 +1,53 @@
+function [Tab,Keys]=moldb_tabval(prmTab,fn)
+%
+%  Function moldb_group returns the table: cell array of structs 
+%  with values of some given parameter
+% 
+%  This function allows you to run some function for each element of the "Table"
+%
+% columns correspond to diffenent keys
+
+
+Keys = fieldnames(prmTab);
+
+N = length(Keys);
+M0 = 0;
+rect=1;
+
+CTab = cell(1,N);
+
+for i=1:N
+
+    key = Keys{i};
+
+    C = getfield(prmTab,key);
+
+    M = length(C);
+
+    if M~=M0 && M0~=0 
+        %M 
+        %M0
+        rect = 0;
+    end
+
+    M0=M;
+
+    CTab{i} = mycellfun(fn,C);
+
+end
+
+if rect
+
+    Tab = cell(M,N);
+
+    for i=1:M
+        for j=1:N
+
+            Tab{i,j} = CTab{j}{i};
+        end
+    end
+
+
+else
+    Tab = CTab;
+end

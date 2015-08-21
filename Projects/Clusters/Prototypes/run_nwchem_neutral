@@ -1,0 +1,11 @@
+#!/bin/bash
+
+nam=$(echo $1 | gawk -F . '{print $1}')
+
+./xyz2nw $1 $2 > $nam.nw0
+cat $nam.nw0 | sed 's:charge\([ ]*\)1:charge 0:g' > $nam.nw
+nwchem $nam.nw > $nam.out
+EH=$(cat $nam.out | grep energy | grep DFT | gawk '{print $5}')
+E=$(echo print '"%0.15f" % ('$EH'*27.2113845657195) ' | python )
+echo $E
+echo $E > E_nwchem_neutral_$nam.dat

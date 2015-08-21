@@ -1,0 +1,37 @@
+function [Tab,TabI]=moldb_group(Keys,Data)
+%
+%  find groups in Keys and creates the structure (i.e. dictionary)
+%  
+
+if ~iscell(Keys)
+    keys = celificate(Keys);
+end
+
+if ~iscell(Data)
+    Data = celificate(Data);
+end
+
+
+N = length(Keys);
+
+Tab = struct;
+TabI = struct;
+
+for i=1:N
+
+    nam = num2str(Keys{i});
+
+    if isfield(Tab,nam)
+        dat = getfield(Tab,nam);
+        idx = getfield(TabI,nam);
+    else
+        dat = {};
+        idx = [];
+    end
+
+    Tab=setfield(Tab,nam, [ dat; { Data{i} }  ]);
+    TabI = setfield(TabI,nam, [ idx i]);
+
+    
+
+end

@@ -1,0 +1,167 @@
+import sys
+import os
+from moldb import Chain,buildImplementation,parseXparam
+from iterate_over_lists import iterate_over_lists
+from mkdir_p import mkdir_p
+from getopt import gnu_getopt
+
+def paramsString(hashDict):
+	s='';
+	for k in sorted(hashDict.keys()):
+		s+=k+'='+str(hashDict[k].value)+'\n';
+	return s;
+
+def dependenciesString(dependencies,relroot):
+	s='';
+	for d in dependencies:
+		s+= d.nickname+'='+ relroot + '/' + d.method.getRef()+'\n';
+
+	return s;
+
+
+def createFolders_callback(data):
+	
+	params = dict(data);
+
+	root = params.pop('moldb_root');
+	prototype = params.pop('moldb_prototype');
+	printOnly = params.pop('moldb_printOnly');
+	project_name = params.pop('moldb_projectName');
+
+	visited={}
+	m = buildImplementation(params,prototype,visited);
+
+	meth = [];
+
+	for pid in sorted(visited.keys()):
+		meth.append(visited[pid]);
+
+	folder = root + '/' + m.getRef();
+
+	relroot = '$MOLDB_PROJECTS/'+project_name+'/Methods';	
+	relfolder = relroot + '/' + m.getRef();	
+
+	print folder;
+
+	if printOnly: return
+
+	# mkdir
+	mkdir_p(folder);
+
+	#chain.implementation	
+	chain = Chain();
+	chain.fromMethods(meth,m.getHash(),project_name,False);
+		
+	f=open(folder + '/chain.imp','w');
+	f.write( chain.toString() );
+	f.close();
+
+
+
+	#PARAMETERS
+	paramStr = 'PROJECT='+project_name+'\n';
+	paramStr += 'FOLDER='+relfolder+'\n'
+	paramStr += 'PROTOTYPES=$MOLDB_PROJECTS/'+project_name+'/Prototypes\n';
+	paramStr += paramsString(params);
+	
+	f=open(folder+'/PARAMETERS','w');
+	f.write(paramStr);
+	f.close();
+
+	os.system('chmod +x '+folder+ '/PARAMETERS');
+	
+
+	#DEPENDENCIES
+	depStr = dependenciesString(m.dependencies,relroot);
+	f=open(folder+'/DEPENDENCIES','w');
+	f.write(depStr);
+	f.close();
+	
+	os.system('chmod +x '+ folder +'/DEPENDENCIES');
+
+	#Scripts
+	strPrm = '#!/bin/bash\n'
+	strPrm += '# METHOD '+m.name+'\n';
+	strPrm += '# ID' + str(m.getHash())+'\n';
+	strPrm += '# --- Dependencies --- \n'
+	strPrm += '. ./DEPENDENCIES\n'
+#	strPrm += dependenciesString(m.dependencies,root);
+	
+	strPrm += '# --- Method Parameters ---\n'
+	strPrm += '. ./PARAMETERS\n'
+#	strPrm += 'PROJECT='+root+'\n'
+#	strPrm += 'FOLDER=' + folder +'\n'
+
+	strPrm += paramsString(params);	
+	strPrm += '\n # ---- Script ----\n'
+
+
+
+	for script in m.scripts:
+		f=open(folder+'/'+script.name,'w');
+		f.write(strPrm+script.text);
+		f.close();
+
+		os.system('chmod +x '+folder+'/'+script.name);
+
+if __name__ == '__main__':
+
+	usage="""
+Usage: moldb_createFolders  <chain.prototype>  [xparams] [--printOnly] 
+
+Reads the chain prototype and create subfolders in the methods_folder  
+(one per each parameters combination)
+Each folder will contain:
+	- chain.implementation file
+	- localized scipt files  
+
+
+if --printOnly option is given, no folders will be created, only their names will be printed on the screen
+
+xparams can be given in format name1=value1,name2=value2,...
+value can be either a single value, or LIST (MIND (default) STATEMENTS IN LISTS !!! )
+"""
+	
+	opts,args=gnu_getopt(sys.argv[1:],'',['printOnly'])
+
+	if len(args)<1:
+		print usage;
+		quit();
+
+
+#	print 'Opening chain prototype file '+sys.argv[1]+' ... '
+#	project_name = args[0];
+	chain=Chain(args[0]);
+#	methodID = args[2];
+	project_name = chain.project;
+	methodID = chain.runMethod;
+
+
+	printOnly =  ('--printOnly','') in opts;
+#	print 'done'
+
+	root= os.getenv('MOLDB_PROJECTS') + '/' + project_name + '/Methods';
+
+#	methodID = sys.argv[3] if len(sys.argv)>2 else prototype.runMethod;
+
+	d=chain.getMethodsDict();
+	prototype = d[methodID];
+
+	if len(args)>1:
+		parseXparam(args[1],prototype,chain)
+		prototype.iterators = prototype.getIterators()
+
+#	print 'Creating folders...'
+
+	xparam = {'moldb_prototype':prototype,
+		  'moldb_root':root,
+		  'moldb_printOnly':printOnly, 
+		  'moldb_projectName':project_name
+		 };
+
+	iterators = prototype.iterators;
+
+	iterate_over_lists(iterators.keys(),iterators.values(), createFolders_callback, xparam)
+
+	
+
