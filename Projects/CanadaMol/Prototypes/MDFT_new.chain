@@ -1,0 +1,317 @@
+PROJECT CanadaMol
+
+BEGIN CHAIN PROTOTYPE
+2 METHODS
+RUN METHOD 2
+USE MD5
+
+FROM Source.chain IMPORT METHOD 1 AS 1
+
+
+BEGIN METHOD MDFT
+ID 2
+	BLOCK DEPENDENCIES
+	1 RECORD
+		METHOD 1 AS Source
+	ENDBLOCK
+
+	BLOCK PARAMETERS
+	6 RECORDS
+		#NOTE: all parameter names shold be lowercase !! 
+
+		molecule = FILE molecules.lst
+		hs_functional = LIST CS (default)
+
+		water_model = LIST spc (default)  spce
+		closure = LIST HNC (default) PLHNC
+
+		charges = LIST No Yes 
+		hs = LIST F
+			# T (default)
+	ENDBLOCK
+
+	BLOCK SCRIPTS
+	5 RECORDS
+
+		SCRIPT prepareInput
+
+			echo $FOLDER
+
+			[ -d input ]|| mkdir input;
+			[ -d output ]|| mkdir output;
+
+			[ -z "$hydrophobicity" ]&& hydrophobicity=F;
+			[ -z "$hydro_type" ]&& hydro_type=C;
+			[ -z "$hydro_scaling" ]&& hydro_scaling=10;
+			[ -z "$a_scaling" ]&& a_scaling=1;
+
+			# ----------- input and output folders ---------------
+			# direct_correlation_functions are necessary!!! 
+			cp -R $PROTOTYPES/mdft_template/input/* input
+			cp $PROTOTYPES/mdft_template/output/* output
+
+
+			# ---------- solute.in -------------------
+
+			if [ $charges == Yes ]; then
+			
+				cp $Source/$molecule.rism .
+			else
+				cat $Source/$molecule.rism | gawk '{print $1" "$2" "$3" "$4" "$5}' > coors_LJ.tmp
+
+				[ -f zero_charges.txt ]&& rm -f zero_charges.txt;
+
+				N=$(cat coors_LJ.tmp | wc -l)
+				for((i=0;i<N;i++))
+				do
+					echo 0 >> zero_charges.tmp
+				done
+
+				multicol coors_LJ.tmp zero_charges.tmp > $molecule.rism
+
+			fi
+
+			$PROTOTYPES/rism2mdft $molecule.rism > input/solute.in
+		
+
+
+			# ---------------  dft.in ------------------------	
+			if [ $water_model == spc ]; then
+				hs_radius=1.27
+			elif [ $water_model == spce ]; then
+				hs_radius=1.42
+			fi
+
+			if [ $charges == Yes ]; then
+				quadrature=L
+				order_of_quadrature=6
+				nb_psi=1
+			elif [ $charges == No ]; then
+				quadrature=GL
+				order_of_quadrature=1
+				nb_psi=1
+			fi
+
+			if [ $closure == HNC ]; then
+				linearize_entropy=F
+			elif [ $closure == PLHNC ]; then
+				linearize_entropy=T
+			fi
+
+			echo "s:SED_quadrature:$quadrature:g" > sed.cmd
+			echo "s:SED_order_of_quadrature:$order_of_quadrature:g" >> sed.cmd
+			echo "s:SED_nb_psi:$nb_psi:g" >> sed.cmd
+
+			echo "s:SED_bridge_hard_sphere:$hs:g" >> sed.cmd
+			#echo "s:SED_hard_sphere_fluid:$hs:g" >> sed.cmd
+	
+			if [ $hydro_type != VdW ]; then
+				echo "s:SED_hard_sphere_fluid:$hs:g" >> sed.cmd
+			else
+				echo "s:SED_hard_sphere_fluid:T:g" >> sed.cmd
+			fi 
+
+	
+			echo "s:SED_hard_sphere_radius:$hs_radius:g" >> sed.cmd
+
+			echo "s:SED_linearize_entropy:$linearize_entropy:g" >> sed.cmd
+			echo "s:SED_if_linearize_entropy:1:g" >> sed.cmd
+					
+			echo "s:SED_water:$water_model:g" >> sed.cmd
+			echo "s:SED_hs_functional:$hs_functional:g" >> sed.cmd
+			echo "s:SED_hydrophobicity:$hydrophobicity:g" >> sed.cmd
+			echo "s:SED_treatment_of_hydro:$hydro_type:g" >> sed.cmd
+			echo "s:SED_hydro_scaling:$hydro_scaling:g" >>sed.cmd		
+		
+			if [ $water_model == spc ]; then
+				hydro_VdW_a=12.3
+				hydro_VdW_prefactor=8.1812242666880284
+			else
+				hydro_VdW_a=16.3
+				hydro_VdW_prefactor=11.993701961852027
+			fi
+
+			echo "s:SED_hydro_VdW_a:$hydro_VdW_a:g" >>sed.cmd
+			echo "s:SED_hydro_VdW_prefactor:$hydro_VdW_prefactor:g" >>sed.cmd
+			echo "s:SED_hydro_VdW_scaling:$a_scaling:g" >>sed.cmd
+
+
+
+			cat input/dft.templ | sed -f sed.cmd > input/dft.in	
+
+
+		ENDSCRIPT
+
+		SCRIPT runMDFT
+
+
+			[ "$1" == "dontDelete" ]&& dontDelete=1;
+
+			recalc=No
+
+			tik=$(date +%s)
+			echo $molecule$'\t'$'\t'"(hs=$hs, closure=$closure   charges=$charges,     water=$water_model)"
+			if [ -z "$hydro_scaling" ]; then
+				echo '{' hydro_type=$hydro_type, hydro_scaling=$hydro_scaling '}'
+			elif [ -z "$a_scaling" ]; then
+				echo '{' hydro_type=$hydro_type, a_scaling=$a_scaling '}'
+			fi
+			
+
+			echo $FOLDER
+
+			if [ -f free_energy.dat ]&&[ $recalc == No ]; then
+				echo "Results already exist. Skip the calculation"
+				NoCalc=1;
+			else
+				mdft > mdft.out
+				cat mdft.out | grep 'FREE ENERGY' | tail -n1 | gawk '{print $4}'> free_energy.dat
+			fi
+
+			if [ $(cat free_energy.dat | wc -l) == 0 ]; then
+				FE=NaN;
+				Vin=NaN;
+				rho2_cs_in=NaN;
+				
+			else
+				FE=$(cat free_energy.dat)
+				cat mdft.out | grep -A 5 C_INSIDE > c_inside.tmp
+				Vin=$(cat c_inside.tmp | grep Vin | gawk '{print $2}')
+				rho2_cs_in=$(cat c_inside.tmp | grep cs_in | gawk '{print $2}')
+			fi
+
+			echo $Vin > Vin.dat
+			echo $rho2_cs_in > rho2_cs_in.dat
+
+			toc=$(date +%s)
+			dt=$((toc-tik))
+
+		
+			if [ "$NoCalc" != 1 ]; then
+
+				cd output
+				cubeTo3d density.cube
+
+				N=$(which octave | wc -l)
+				if [ $N -gt 0 ]; then
+				octave  --eval 'A=load("density.3d");f=fopen("G_sum.dat","w");fprintf(f,"%f\n",sum(A-1));fclose(f);' >/dev/null
+
+				else
+
+					cat >sum.py <<EOL
+S=0;
+for s in open("density.3d"):
+	S+=float(s)-1;
+
+print S
+EOL
+
+				python sum.py > G_sum.dat
+
+				fi
+
+				cd ..
+	
+			
+				[ "$dontDelete" != 1 ]&& rm -f output/*cube output/*bin output/*3d output/*grd;
+			fi
+
+			echo Free Energy = $FE,  Vin=$Vin,  rho^2*cs_in=$rho2_cs_in,  Time Elapsed = $dt sec
+				
+	
+
+		ENDSCRIPT	
+
+		SCRIPT reRunMDFT
+	
+			rm -f free_energy.dat
+			./runMDFT
+
+		ENDSCRIPT
+
+		SCRIPT recalcDivergent
+
+			echo $FOLDER
+
+			[ -f free_energy.dat ]&& free_energy=$(cat free_energy.dat);
+			[ -f output/G_sum.dat ]&& G_sum=$(cat output/G_sum.dat);
+
+			if [ -n "$free_energy" ] && [ -n "$G_sum" ]; then
+
+				echo Nothing to do: everything is ok
+			else
+#				echo Iteration is divergent. Trying to re-start previous (convergent) 
+				
+				if [ $hs == F ]; then
+					if [ $charges == Yes ]; then
+						chargesRef=No;
+					else
+						echo I am sorry, I cannot help!!!
+						exit
+					fi
+				else
+					chargesRef=$charges
+				fi
+
+				echo moldb_getRef chain.imp hs=F,charges=$chargesRef
+
+				RefMol=$(moldb_getRef chain.imp hs=F,charges=$chargesRef )
+
+#				echo $RefMol
+
+				if [ $chargesRef == No ]&&[ $charges == Yes ]; then
+
+					cp input/solute.in  input/solute.old
+					cp $RefMol/input/solute.in input						
+
+					mdft > mdft2.out
+
+					cp input/solute.old input/solute.in
+					mv output/density.bin input/density.bin		
+				else
+					P=$(pwd)
+	
+					cd $RefMol
+					mdft > mdft2.out
+					cd $P
+				
+					mv $RefMol/output/density.bin input
+				fi
+
+				cp input/dft.in input/dft.old
+
+			
+				echo 's:reuse_density = F:reuse_density = T:g' > xsed.cmd
+				echo 's:maximum_iteration_nbr = \([0-9]*\):maximum_iteration_nbr = 5:g' > xsed.cmd
+	
+				cat input/dft.old | sed -f xsed.cmd > input/dft.in
+				
+
+			fi
+
+			./runMDFT
+
+			rm -f input/density.bin
+	
+		ENDSCRIPT
+
+		SCRIPT clear
+
+			mv output/G_sum.dat .
+			
+			rm -Rf input
+			rm -Rf output
+
+			mkdir output 
+			mv G_sum.dat output
+
+		ENDSCRIPT
+
+
+	ENDBLOCK
+
+END METHOD MDFT
+
+
+
+END CHAIN PROTOTYPE

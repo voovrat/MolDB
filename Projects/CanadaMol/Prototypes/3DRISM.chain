@@ -1,0 +1,185 @@
+PROJECT CanadaMol
+
+BEGIN CHAIN PROTOTYPE
+2 METHODS
+RUN METHOD 2
+USE MD5
+
+FROM Source.chain IMPORT METHOD 1 AS 1
+
+
+BEGIN METHOD 3DRISM
+ID 2
+
+	BLOCK DEPENDENCIES
+	1 RECORD
+		METHOD 1 AS Source
+	ENDBLOCK DEPENDENCIES
+
+	BLOCK PARAMETERS
+	8 RECORDS
+#		closure = LIST HNC KH
+		closure = LIST HNC
+		charges = LIST no
+#		charges = LIST yes (default) no
+		solvent = LIST xwater
+# SEE ALSO 3DRISM_ch.chain!!!!!!
+#		solvent = LIST water (default) xwater
+#		grid = LIST coarse (default) fine
+		grid = LIST fine
+#		cutoff = LIST 8 (default) 10 12 1000
+		cutoff = LIST 1000
+		buffer = LIST 20 (default)
+		spacing = LIST 0.2 (default)
+#		density = LIST 33.36 (default) 33.742
+		density = LIST 33.36 (default)
+	ENDBLOCK PARAMETERS
+
+	BLOCK SCRIPTS
+	3 RECORDS
+
+		SCRIPT prepareInput
+
+			echo $FOLDER
+
+			case $solvent in
+			water)
+				SolventData=water
+				SolventDataFile=water.slv
+				SolventRDFsFile=waterRDFs.txt
+				SolventOmegaFile=waterOmega.txt
+				;;
+			xwater)
+				SolventData=xwater
+				SolventDataFile=xwater.slv
+				SolventRDFsFile=xwaterRDFs.txt
+				SolventOmegaFile=xwaterOmega.txt
+				;;
+			default)
+				echo "unknown solvent :" $solvent
+				;;
+			esac
+
+			[ $grid == coarse ]&& parameters=parameters.tmpl;
+			[ $grid == fine ]&& parameters=parameters_hi.tmpl;
+
+
+
+			cp $PROTOTYPES/3DRISM/* .
+
+			echo "s:SED_CLOSURE:$closure:g" > sed.cmd
+			echo "s:SED_SolventDataFile:$SolventDataFile:g" >> sed.cmd
+			echo "s:SED_SolventOmegaFile:$SolventOmegaFile:g" >> sed.cmd
+			echo "s:SED_SolventRDFsFile:$SolventRDFsFile:g" >> sed.cmd
+			echo "s:SED_LJCutoff:$cutoff:g" >> sed.cmd
+			echo "s:SED_buffer:$buffer:g" >> sed.cmd
+			echo "s:SED_spacing:$spacing:g" >> sed.cmd
+
+			cat $parameters | sed -f sed.cmd  > parameters.txt
+
+			cat $SolventData.templ | sed "s:SED_density:$density:g" > $SolventDataFile
+
+
+			cp $Source/$molecule.rism mol.rism
+			
+			if [ $charges == no ]; then
+
+				cat mol.rism | gawk '{print $1" "$2" "$3" "$4" "$5}' > mol.tmp
+				N=$(cat mol.rism | wc -l)
+
+				rm -f zero.txt			
+
+				for((i=0;i<$N;i++))
+				do
+					echo 0 >> zero.txt
+				done
+				
+				multicol mol.tmp zero.txt > mol.rism
+
+			fi
+
+
+		ENDSCRIPT 
+
+
+		SCRIPT run3DRISM
+
+			echo $FOLDER
+			echo $molecule $closure
+
+			tic=$(date +%s)
+
+			
+			multiGridMain parameters.txt  >multiGrid.out &
+			pid=$!
+			#TimeLimit=30  #% *10 = 300 sec = 5min
+			
+			[ $grid == coarse ]&& TimeLimit=30;
+			[ $grid == fine ]&& TimeLimit=200;
+
+
+
+			for((i=0;i<=$TimeLimit;i++))
+			do
+				sleep 10
+				N=$(ps -A | grep $pid | wc -l)
+				
+				if [ $N == 0 ]; then
+					break;
+				fi
+	
+				echo -n .
+			done
+
+			echo $i $pid
+
+			
+			if [ $i -ge $TimeLimit ]; then
+				echo ITERATION DIVERGED 
+				kill -9 $pid
+			fi
+
+			calculateFreeEnergySimple mol_in_${solvent}_ > freeEnergy.out
+
+			toc=$(date +%s)
+
+			cat freeEnergy.out | grep HNC | gawk '{print $2}' > HNC.dat
+			cat freeEnergy.out | grep KH | gawk '{print $2}' > KH.dat
+			cat freeEnergy.out | grep GF | gawk '{print $2}' > GF.dat
+			cat freeEnergy.out | grep VUA | gawk '{print $2}' > PMV.dat
+
+#			python $PROTOTYPES/sumG.py mol_in_water_g0.3d > G_sum0.dat
+#			python $PROTOTYPES/sumG.py mol_in_water_g1.3d > G_sum1.dat
+
+			tail -n4 freeEnergy.out
+			echo Time Elapsed=$((toc-tic))
+
+			rm -f *.3d
+
+		ENDSCRIPT
+
+		SCRIPT clearCalculations
+
+			# clears all intermediate files used for the calculation
+			# prepareInput will be necessary before next start of run3DRISM
+
+			rm -f water.slv
+			rm -f *.grd
+			rm -f waterRDFs.txt
+			rm -f parameters.txt
+			rm -f mol.rism
+			rm -f *.out
+
+		ENDSCRIPT
+
+
+	ENDBLOCK SCRIPTS
+
+
+
+END METHOD 3DRISM
+
+
+
+
+END CHAIN PROTOTYPE

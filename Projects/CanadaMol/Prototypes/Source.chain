@@ -1,0 +1,139 @@
+PROJECT CanadaMol
+
+BEGIN CHAIN PROTOTYPE
+1 METHOD
+RUN METHOD 1
+USE MD5
+
+
+BEGIN METHOD Source
+ID 1
+
+	BLOCK DEPENDENCIES
+	0 RECORDS	
+	ENDBLOCK DEPENDENCIES
+
+	BLOCK PARAMETERS
+	2 RECORDS
+		ref = LIST $MOLDB_PROJECTS/CanadaMol/Sources/JCTC_2009_5_350/JCTC_5_350.bib
+		molecule = FILE molecules.lst
+	ENDBLOCK PARAMETERS
+
+	BLOCK SCRIPTS
+	8 RECORDS
+
+		SCRIPT copyFiles
+			
+			echo $molecule
+
+			Source=$MOLDB_PROJECTS/CanadaMol/Sources/JCTC_2009_5_350
+
+			cp $Source/charged_mol2files/$molecule.mol2 .
+			cp $Source/prmcrd/$molecule.prmtop .
+			cp $Source/prmcrd/$molecule.crd .
+
+		ENDSCRIPT	
+
+
+
+		SCRIPT parseMol2
+		# parses Mol2 files and gets coors and charges 
+
+		cat $molecule.mol2 | grep ATOM -A 1000 | grep BOND -B 1000 | head -n-1 | tail -n+2 >mol2.tmp
+		cat mol2.tmp | gawk '{print $2}' > atomnames_full.txt
+		cat atomnames_full.txt | tr -d [0-9] > atomnames.txt
+		cat mol2.tmp | gawk '{print $3" "$4" "$5}' > $molecule.coors
+		cat mol2.tmp | gawk '{print $9}' > $molecule.charges
+		
+		ENDSCRIPT
+
+		SCRIPT parsePrmtop
+	
+			#Uses : makePdb, ambertop2rism.py
+			# They are located in ~/460GB/Development/utils folder (should be in Paths)
+			# Note: utils folder should be distributed with the database
+
+			echo $FOLDER
+
+			makePdb $molecule.coors atomnames.txt > $molecule.pdb
+
+			P=$MOLDB_PROJECTS/CanadaMol/Prototypes
+
+			python $P/ambertop2rismmol.py $molecule.prmtop $molecule.pdb $molecule.rism
+
+			cat $molecule.rism | gawk '{print $6}' > charges.txt
+			cat $molecule.rism | gawk '{print $4}' > sigma.txt
+			cat $molecule.rism | gawk '{print $5}' > epsilon.txt
+
+		ENDSCRIPT
+
+		SCRIPT calcWeight
+
+		W=0
+		for a in $(cat atomnames.txt)
+		do
+			#echo $a
+			w=$(cat $PROTOTYPES/atom_weights.txt | grep $'\t'$a$'\t' | gawk '{print $1}' )
+		#	echo $a $w
+			W=$( echo "print $W +$w;quit();" | python   )
+		
+		done
+		echo $W > weight.txt
+
+		ENDSCRIPT
+
+
+		SCRIPT showMol
+
+			jmol $molecule.pdb &
+
+		ENDSCRIPT
+		
+		SCRIPT calcASA
+
+			python $(which asa.py) $molecule.pdb | gawk '{print $1}' > ASA.dat
+
+		ENDSCRIPT
+
+        SCRIPT getRotations
+
+	    cp $molecule.pdb mol.pdb
+	
+            coors2pat mol.pdb > mol.pat
+            cat mol.pat  | sed 's:\(.\)(\([0-9]*\)):X(\2):g' > molX.pat
+
+            Ncycle=$(assignAtomTypes molX.pat $PROTOTYPES/cycle6.pat | grep cycle | wc -l ) 
+            Nchain=$(assignAtomTypes molX.pat $PROTOTYPES/X.pat | grep chain | wc -l)
+
+            Nrot=$((Nchain-Ncycle))
+
+            echo $Ncycle > Ncycle.dat
+            echo $Nchain > Nchain.dat
+            echo $Nrot > Nrot.dat
+
+          ENDSCRIPT
+
+	SCRIPT copySolute
+
+		rism2mdft $molecule.rism > $molecule.mdft
+
+		cat $molecule.mdft | tail -n+4 | gawk '{print $1" "$2" "$3" "$4" "$5" "$6" "$7" "$8" "$9" "$10}' > tmp.mdft
+                multicol tmp.mdft atomnames.txt atomnames.txt > tmp2.mdft
+
+                head -n3 $molecule.mdft > $molecule
+                cat tmp2.mdft >> $molecule
+
+		mkdir -p $PROTOTYPES/solutes
+
+
+
+		cp $molecule $PROTOTYPES/solutes
+
+	ENDSCRIPT
+            
+
+	ENDBLOCK SCRIPTS
+
+END METHOD ParseSource
+
+END CHAIN PROTOTYPE
