@@ -1,0 +1,70 @@
+#!/bin/bash
+
+if [ $# -lt 3 ]; then
+
+  echo usage  xyz2lmp input.xyz  coma_separated_atomnames minX:maxX minY:maxY minZ:maxZ '>' output.lmp
+  echo    OR
+  echo xyz2lmp input.xyz  coma_separated_atomnames buffer '>' output.lmp exit
+  exit
+fi
+
+xyz=$1
+atomnames=$2
+
+
+N=$(head -n1 $xyz )
+
+#tail -n+3 $xyz  | gawk '{print $1}' | sort | uniq > uniq_atom.txt
+echo $2 | tr , $'\n' > uniq_atom.txt
+NA=$(cat uniq_atom.txt | wc -l) 
+seq 1 $NA > atom_id.txt
+paste uniq_atom.txt atom_id.txt | gawk '{print "s:"$1":"$2":g" }' > atom_id.sed
+echo generated from $xyz 
+
+echo
+echo $N atoms
+echo $NA atom types
+echo
+
+if [ $# -gt 3 ]; then
+   echo $3 xlo xhi | tr : ' '
+   echo $4 ylo yhi | tr : ' '
+   echo $5 zlo zhi | tr : ' '
+else
+
+   tail -n+3 $xyz | gawk '{print $2}' | sort -n > $xyz.Xsrt
+   tail -n+3 $xyz | gawk '{print $3}' | sort -n > $xyz.Ysrt
+   tail -n+3 $xyz | gawk '{print $4}' | sort -n > $xyz.Zsrt
+
+   buf=$3;
+   minX=$(head -n1 $xyz.Xsrt)
+   minX=$( echo print $minX - $buf | python )
+   maxX=$(tail -n1 $xyz.Xsrt)
+   maxX=$( echo print $maxX + $buf | python )
+
+   minY=$(head -n1 $xyz.Ysrt)
+   minY=$( echo print $minY - $buf | python )
+   maxY=$(tail -n1 $xyz.Ysrt)
+   maxY=$( echo print $maxY + $buf | python )
+
+
+   minZ=$(head -n1 $xyz.Zsrt)
+   minZ=$( echo print $minZ - $buf | python )
+   maxZ=$(tail -n1 $xyz.Zsrt)
+   maxZ=$( echo print $maxZ + $buf | python )
+
+   echo $minX $maxX xlo xhi
+   echo $minY $maxY ylo yhi
+   echo $minZ $maxZ zlo zhi
+
+fi
+
+echo
+echo Atoms
+echo
+
+seq 1 $N > atom_tag.txt
+tail -n+3 $xyz | sed -f atom_id.sed > atoms.tmp
+paste atom_tag.txt atoms.tmp 
+
+

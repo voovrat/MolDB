@@ -1,0 +1,24 @@
+#!/bin/bash
+
+nam=$(echo $1 | gawk -F . '{print $1}')
+
+cat >run_lammps.py <<EOL
+
+from lmpdriver import *
+L=LMP('$LMP/src/lmp_debug')
+a = XYZ()
+a.read('$1')
+e=L.run(a)
+
+f=open('energy.dat','w')
+f.write( "%0.15f\n" % e )
+f.close()
+
+f=open('energy_tot.dat','w')
+f.write( "%0.15f\n" % L.etot )
+f.close()
+
+EOL
+
+python run_lammps.py
+

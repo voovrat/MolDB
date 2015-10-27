@@ -1,0 +1,50 @@
+#!/bin/sh
+#PBS -l walltime=100:00:00
+#PBS -l nodes=1:ppn=8
+#PBS -p 0  
+#PBS -N test-V1
+
+# define termination time
+(sleep 98h 10m; killall aims.071711_6.mpi.x  ; export command='echo stopped')&
+
+module purge
+module add openmpi/intel/64/1.4
+module add intel/compiler/64/11.1/059
+module add intel/mkl/10.2.2.025
+module list
+
+env
+
+# set directory with inputs, must be the full path without /home/username
+export startdir=Promotion/FHIaims/Rechnungen-fuer-Essen/neutrale_cluster
+# set the user name needed for paths
+export myname=$LOGNAME
+
+# create a temporary directory on the executing host
+mkdir -p /SCRATCH/$myname/$startdir
+
+# copy the input files to the executing host
+cd $startdir
+cp * /SCRATCH/$myname/$startdir
+
+# change to the executing directory
+cd /SCRATCH/$myname/$startdir
+
+# execute the calculation here
+
+for f in geometry.in-*
+	do cp $f geometry.in
+      mpirun -np 8 aims.081213.mpi.x  > $f-fhiaims.out
+	done
+
+
+# copy the results back to the home directory
+cp * /home/$myname/$startdir
+
+# clean up the SCRATCH directory
+cd /SCRATCH/$myname
+rm -rf $startdir
+
+kill %1
+##########################################################################
+

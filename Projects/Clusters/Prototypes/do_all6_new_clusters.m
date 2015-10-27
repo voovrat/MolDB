@@ -1,0 +1,230 @@
+[DU,EU]=unit_names;
+
+
+RefC = moldb_getRef('clusters.chain');
+RefS = moldb_getRef('clusters_new.chain');
+
+Ref = [RefC; RefS];
+
+E = cell_get_values(moldb_load(Ref,'energy.dat'));
+Etot = cell_get_values(moldb_load(Ref,'energy_tot.dat'));
+
+
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%    dimer cluster
+
+cname=mycellfun(@(x)x.parameters.molecule,Ref)
+
+II =  find(...
+       cell_get_values(...
+           mycellfun(@(x)length(x),strfind(cname,'c0'),0)...
+       )...
+      );
+
+RRef = Ref(II);
+EE=E(II);
+
+IIgs = moldb_filter(RRef,{'prog','gaussian'});
+IInw = moldb_filter(RRef,{'prog','nwchem'});
+IIab = moldb_filter(RRef,{'prog','abinit'});
+IIl1 = moldb_filter(RRef,{'prog','lammps_new1'});
+IIl2 = moldb_filter(RRef,{'prog','lammps_new2'});
+
+
+
+IIp = moldb_filter(RRef,{'proton','T'});
+IIn = moldb_filter(RRef,{'proton','F'});
+
+IIgsp = intersect(IIgs,IIp);
+IIgsn = intersect(IIgs,IIn);
+
+IInwp = intersect(IInw,IIp);
+IInwn = intersect(IInw,IIn);
+
+IIabp = intersect(IIab,IIp);
+IIabn = intersect(IIab,IIn);
+
+IIl1p = intersect(IIl1,IIp);
+IIl1n = intersect(IIl1,IIn);
+
+IIl2p = intersect(IIl2,IIp);
+IIl2n = intersect(IIl2,IIn);
+
+
+ii0_gs_p = IIgsp(moldb_filter(RRef(IIgsp),{'molecule','c0'}))
+ii0_gs_n = IIgsn(moldb_filter(RRef(IIgsn),{'molecule','c0'}))
+
+
+ii0_nw_p = IInwp(moldb_filter(RRef(IInwp),{'molecule','c0'}))
+ii0_nw_n = IInwn(moldb_filter(RRef(IInwn),{'molecule','c0'}))
+
+ii0_ab_p = IIabp(moldb_filter(RRef(IIabp),{'molecule','c0'}))
+ii0_ab_n = IIabn(moldb_filter(RRef(IIabn),{'molecule','c0'}))
+
+ii0_l1_p = IIl1p(moldb_filter(RRef(IIl1p),{'molecule','c0'}))
+ii0_l1_n = IIl1n(moldb_filter(RRef(IIl1n),{'molecule','c0'}))
+
+
+ii0_l2_p = IIl2p(moldb_filter(RRef(IIl2p),{'molecule','c0'}))
+ii0_l2_n = IIl2n(moldb_filter(RRef(IIl2n),{'molecule','c0'}))
+
+dEE_gs0 = EE(ii0_gs_p) - EE(ii0_gs_n);
+dEE_nw0 = EE(ii0_nw_p) - EE(ii0_nw_n);
+dEE_ab0 = EE(ii0_ab_p) - EE(ii0_ab_n);
+dEE_l10 = EE(ii0_l1_p) - EE(ii0_l1_n) ;
+dEE_l20 = EE(ii0_l2_p) - EE(ii0_l2_n);
+
+
+%dEE_lt0 = load('E_lammpstot_c1p.dat') - load('E_lammpstot_c1n.dat');
+
+
+dEEnn_gs = cell(6,1);
+dEEnn_nw = cell(6,1);
+dEEnn_ab = cell(6,1);
+dEEnn_l1 = cell(6,1);
+dEEnn_l2 = cell(6,1);
+
+
+%dEEnn_lt = cell(7,1);
+
+for i=1:length(IInwp)
+   
+   cc = RRef{IInwp(i)}.parameters.molecule
+   if strcmp(cc,'c0') 
+      continue
+   end
+
+   csize = length(cc)/2 - 1;
+
+  % gaussian
+   
+   ii_gsp = moldb_filter(RRef(IIgsp),{'molecule',cc});
+   ii_gsn = moldb_filter(RRef(IIgsn),{'molecule',cc});
+
+   dEE = EE(IIgsp(ii_gsp)) - EE(IIgsn(ii_gsn)) - dEE_gs0;
+   dEEnn_gs{csize} = [ dEEnn_gs{csize} dEE ];
+
+   % nwchem
+   
+   ii_nwp = moldb_filter(RRef(IInwp),{'molecule',cc});
+   ii_nwn = moldb_filter(RRef(IInwn),{'molecule',cc});
+
+   dEE = EE(IInwp(ii_nwp)) - EE(IInwn(ii_nwn)) - dEE_nw0;
+   dEEnn_nw{csize} = [ dEEnn_nw{csize} dEE ];
+
+
+ 
+   %abinit
+
+   ii_abp = moldb_filter(RRef(IIabp),{'molecule',cc});
+   ii_abn = moldb_filter(RRef(IIabn),{'molecule',cc});
+ 
+   dEE = EE(IIabp(ii_abp)) - EE(IIabn(ii_abn)) - dEE_ab0;
+   dEEnn_ab{csize} = [ dEEnn_ab{csize} dEE ];
+
+   %lammps1
+
+   ii_l1p = moldb_filter(RRef(IIl1p),{'molecule',cc});
+   ii_l1n = moldb_filter(RRef(IIl1n),{'molecule',cc});
+ 
+   dEE = EE(IIl1p(ii_l1p)) - EE(IIl1n(ii_l1n)) - dEE_l10;
+   dEEnn_l1{csize} = [ dEEnn_l1{csize} dEE ];
+
+    %lammps2
+
+   ii_l2p = moldb_filter(RRef(IIl2p),{'molecule',cc});
+   ii_l2n = moldb_filter(RRef(IIl2n),{'molecule',cc});
+ 
+   dEE = EE(IIl2p(ii_l2p)) - EE(IIl2n(ii_l2n)) - dEE_l20;
+   dEEnn_l2{csize} = [ dEEnn_l2{csize} dEE ];
+
+end
+
+
+
+dEEn_gs = zeros(6,1);
+dEEn_nw = zeros(6,1);
+dEEn_ab = zeros(6,1);
+dEEn_l1 = zeros(6,1);
+dEEn_l2 = zeros(6,1);
+
+for i=1:6
+
+  dEEn_gs(i) = sum( dEEnn_gs{i}) / Cmn(i-1,5);
+  dEEn_nw(i) = sum( dEEnn_nw{i}) / Cmn(i-1,5);
+  dEEn_ab(i) = sum( dEEnn_ab{i}) / Cmn(i-1,5);
+  dEEn_l1(i) = sum( dEEnn_l1{i}) / Cmn(i-1,5);
+  dEEn_l2(i) = sum( dEEnn_l2{i}) / Cmn(i-1,5);
+
+end
+
+
+dEEn_nw(3) = (dEEn_nw(2) + dEEn_nw(4))/2;
+
+
+plot([dEEn_gs dEEn_nw dEEn_ab dEEn_l1 dEEn_l2 ]*unit2unit(EU,'eV','kcal/mol'))
+
+
+%%%%%%%
+
+ddEE_gs = dEEn_gs(end) - dEEn_gs(1)
+ddEE_ab = dEEn_ab(end) - dEEn_ab(1)
+ddEE_nw = dEEn_nw(end) - dEEn_nw(1)
+ddEE_l1 = dEEn_l1(end) - dEEn_l1(1)
+ddEE_l2 = dEEn_l2(end) - dEEn_l2(1)
+
+
+[DU,EU]=unit_names;
+
+ddEE_gs*unit2unit(EU,'eV','kcal/mol')
+ddEE_ab*unit2unit(EU,'eV','kcal/mol')
+ddEE_nw*unit2unit(EU,'eV','kcal/mol')
+ddEE_l1*unit2unit(EU,'eV','kcal/mol')
+ddEE_l2*unit2unit(EU,'eV','kcal/mol')
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+KK = unit2unit(EU,'eV','kcal/mol');
+
+head = {'m','gaussian','nwchem','abinit','lammps1','lammps2'}
+A2 = [ dEEn_gs dEEn_nw dEEn_ab dEEn_l1 dEEn_l2 ] * KK;
+X2 = (1:6)';
+O2 = ones(size(X2));
+B2 = A2 - O2*A2(end,:);
+
+%C1 = [ head; celificate(A1) ];
+C2 = celificate([X2 A2 ]);
+C2 = [ celificate([X2 A2 ]) ; {'max-min'} celificate(max(A2) - min(A2)) ];
+
+
+print_cell(C2,'c2p_new.tex','&','\\')
+
+
+type c2p_new.tex
+
+kT = unit2unit(EU,'K','kcal/mol')*298.15;
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+hnd = plot((1:6),B2,[1 6],[kT kT],[1 6],[-kT -kT])
+xlabel('m (bulk cluster size)')
+ylabel('$\Delta E_{meth}^m - \Delta E_{meth}^6$ [kcal/mol]')
+legend('gaussian','nwchem','abinit','NN(I)','NN(II)','kT','location','southeast')
+
+set(hnd(1:5),'LineWidth',3)
+
+set(hnd(1),'Marker','s')
+set(hnd(2),'Marker','o')
+set(hnd(3),'Marker','^')
+set(hnd(4),'Marker','d')
+set(hnd(5),'Marker','x','Color',[1 0 1])
+set(hnd([ 6 7]),'LineStyle','--','Color',[0 0 0])
+legend('boxoff')
+
+printpng('fig_c2p_new.png');
+
+
+
+

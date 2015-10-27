@@ -1,0 +1,49 @@
+#!/bin/bash
+# METHOD QM
+# IDFECE58CD571D130DA525384CB2C43302
+# --- Dependencies --- 
+. ./DEPENDENCIES
+# --- Method Parameters ---
+. ./PARAMETERS
+molecule=c1c4c6
+prog=lammps
+proton=T
+
+ # ---- Script ----
+
+			echo $FOLDER
+                     
+			if [ $proton == T ]; then
+				cnam=c1p.xyz
+			else
+				cnam=c1n.xyz
+			fi
+
+			case $prog in
+				abinit) cp $PROTOTYPES/xyz2abinit .  
+					[ -a Psps_for_tests ] || ln -s $PROTOTYPES/Psps_for_tests Psps_for_tests;
+					cp $PROTOTYPES/run_abinit .
+					cp $PROTOTYPES/tbase.in0 .  
+					;;
+				nwchem) cp $PROTOTYPES/xyz2nw . 
+					cp $PROTOTYPES/run_nwchem .
+					;;
+				lammps) cp $PROTOTYPES/toupper .
+					cp $PROTOTYPES/make_sed_change .
+					cp $PROTOTYPES/xyz2lmp . 
+					[ -a NN-Water ] || ln -s $PROTOTYPES/NN-Water NN-Water;
+					cp $PROTOTYPES/run_lammps .
+					cp $PROTOTYPES/sim.templ . 
+					;;
+			esac
+		
+			cp $PROTOTYPES/$cnam c.xyz
+			cp $PROTOTYPES/sc_rest.xyz .
+
+			cp $PROTOTYPES/lmpdriver.py . 
+			cp $PROTOTYPES/gen_cluster.py .
+			
+			python gen_cluster.py c.xyz sc_rest.xyz $molecule cluster.xyz
+		
+			cp $PROTOTYPES/run_$prog .
+ 

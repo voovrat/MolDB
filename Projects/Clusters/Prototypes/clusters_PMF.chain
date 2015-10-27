@@ -1,0 +1,200 @@
+PROJECT Clusters
+
+BEGIN CHAIN PROTOTYPE
+1 METHODS
+RUN METHOD 1
+USE MD5
+
+BEGIN METHOD QM
+ID 1
+	BLOCK DEPENDENCIES
+	0 RECORDS
+	ENDBLOCK DEPENDENCIES
+
+	BLOCK PARAMETERS
+	3 RECORDS
+		molecule = FILE clusters.lst
+		proton = LIST T F 
+	#	prog = LIST abinit nwchem gpaw
+	#	prog = LIST abinit nwchem lammps abinit_neutral 
+        #		prog = LIST abinit abinit_neutral gaussian
+                prog = LIST gaussian lammps_new1 lammps_new2
+ 	ENDBLOCK PARAMETERS
+
+
+	BLOCK SCRIPTS
+	6 RECORDS
+
+		SCRIPT prepareInput
+
+			echo $FOLDER
+                     
+			if [ $proton == T ]; then
+				cnam=c1p.xyz
+			else
+				cnam=c1n.xyz
+			fi
+
+			case $prog in
+				abinit) cp $PROTOTYPES/xyz2abinit .  
+					[ -a Psps_for_tests ] || ln -s $PROTOTYPES/Psps_for_tests Psps_for_tests;
+					cp $PROTOTYPES/run_abinit .
+					cp $PROTOTYPES/tbase.in0 .  
+					;;
+				abinit_neutral) cp $PROTOTYPES/xyz2abinit .  
+					[ -a Psps_for_tests ] || ln -s $PROTOTYPES/Psps_for_tests Psps_for_tests;
+					cp $PROTOTYPES/run_abinit_neutral .
+					cp $PROTOTYPES/tbase.in0 .  
+					;;
+
+
+				nwchem) cp $PROTOTYPES/xyz2nw . 
+					cp $PROTOTYPES/run_nwchem .
+					;;
+                                gaussian) cp $PROTOTYPES/run_gaussian .
+                                         ;;
+                                  
+				nwchem_neutral) cp $PROTOTYPES/xyz2nw . 
+					cp $PROTOTYPES/run_nwchem_neutral .
+					;;
+	
+
+				lammps) cp $PROTOTYPES/toupper .
+					cp $PROTOTYPES/make_sed_change .
+					cp $PROTOTYPES/xyz2lmp . 
+					[ -a NN-Water ] || ln -s $PROTOTYPES/NN-Water NN-Water;
+					cp $PROTOTYPES/run_lammps .
+					cp $PROTOTYPES/sim.templ . 
+					;;
+				lammps_new1) cp $PROTOTYPES/toupper .
+					cp $PROTOTYPES/make_sed_change .
+					cp $PROTOTYPES/xyz2lmp . 
+					[ -a NN-Water ] || ln -s $PROTOTYPES/NN-Water-New-1 NN-Water;
+					cp $PROTOTYPES/run_lammps ./run_lammps_new1
+					cp $PROTOTYPES/sim.templ . 
+					;;
+				lammps_new2) cp $PROTOTYPES/toupper .
+					cp $PROTOTYPES/make_sed_change .
+					cp $PROTOTYPES/xyz2lmp . 
+					[ -a NN-Water ] || ln -s $PROTOTYPES/NN-Water-New-2 NN-Water;
+					cp $PROTOTYPES/run_lammps ./run_lammps_new2
+					cp $PROTOTYPES/sim.templ . 
+					;;
+
+
+			esac
+		
+			cp $PROTOTYPES/$cnam c.xyz
+			cp $PROTOTYPES/sc_rest.xyz .
+
+			cp $PROTOTYPES/lmpdriver.py . 
+			cp $PROTOTYPES/gen_cluster.py .
+			
+			python gen_cluster.py c.xyz sc_rest.xyz $molecule cluster.xyz
+		
+			cp $PROTOTYPES/run_$prog .
+ 
+		ENDSCRIPT
+
+                SCRIPT run
+
+			echo $FOLDER
+			echo $prog $molecule $proton
+
+			if [ -f energy.dat ]; then
+				echo energy.dat exists! skiping the calculation! To re-start the calculation - run clear
+			else	
+		
+				tic=$(date +%s)
+				[ -f basis.dat ]&& basis=$(cat basis.dat);	
+
+                                if [ $prog == gaussian ]; then
+                                   ./run_gaussian cluster.xyz $proton
+                                else
+    				   ./run_$prog cluster.xyz $basis
+                                fi
+
+				if [ $prog == lammps_new1 ] || [ $prog == lammps_new2 ]; then
+   			   	 cp E_lammps_cluster.dat energy.dat
+				else
+                                 cp E_${prog}_cluster.dat energy.dat
+                                fi
+				toc=$(date +%s)
+				echo $((toc-tic)) >> time.dat
+				echo calculated in $((toc-tic)) s 
+
+			fi
+
+                ENDSCRIPT
+
+		SCRIPT clear
+
+			rm -f energy.dat
+
+		ENDSCRIPT
+
+		SCRIPT recalcDivergent
+			N=$( cat energy.dat | wc -w )
+		
+			[ $N -gt 0 ] && exit;
+
+			rm -f energy.dat
+
+			if [ $prog == 'nwchem' ]; then
+				echo 6-31G > basis.dat
+				./run
+
+			fi
+
+
+		ENDSCRIPT
+              
+		SCRIPT remove_nwchem_4clusters
+
+			[ $prog != 'nwchem' ] && exit;
+			[ $proton == 'T' ]&& exit;
+
+			N=$(echo $molecule | wc -c)
+			[ $N != 9 ]&& exit;  # cXcY... 8 + 1 (\n)
+
+			mv energy.dat energy_old.dat
+			echo > energy.dat
+
+		ENDSCRIPT
+
+
+		SCRIPT calc_dist
+
+cat >calc_dist.m <<EOL
+    
+   [A,at] = read_xyz('cluster.xyz');
+   Io = find(cell_get_values(mycellfun(@(x)x=='O',at)));
+   D = mydist_sqrt(A);
+   D1 = mydist_sqrt(A(Io,:));
+   save -ascii all_dists.dat D
+   save -ascii ox_dists.dat D1
+
+   dd = sum(sum(D)) / (length(at)*(length(at)-1));
+   dd1 = sum(sum(D1)) / (length(Io)*(length(Io)-1));
+
+   D2 = D1;
+   D2(D2==0) = inf;
+   MM=max(min(D2));
+   
+   save -ascii max_min_dist.dat MM
+   save -ascii mean_all_dist.dat dd
+   save -ascii mean_ox_dist.dat dd1
+EOL
+
+			octave -q calc_dist.m
+
+		ENDSCRIPT
+
+	ENDBLOCK SCRIPTS
+
+
+
+END METHOD QM
+
+
+END CHAIN PROTOTYPE

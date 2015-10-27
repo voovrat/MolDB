@@ -1,0 +1,114 @@
+PROJECT Clusters
+BEGIN CHAIN IMPLEMENTATION
+1 METHODS
+RUN METHOD E9D61B7DBDEAC38B4AB588F180ACDEA8
+USE MD5
+
+BEGIN METHOD QM
+	ID E9D61B7DBDEAC38B4AB588F180ACDEA8
+	BLOCK DEPENDENCIES
+	0 RECORDS
+	ENDBLOCK DEPENDENCIES
+	BLOCK PARAMETERS
+	3 RECORDS
+		molecule = c1c3c6
+		prog = lammps
+		proton = F
+	ENDBLOCK PARAMETERS
+	BLOCK SCRIPTS
+	5 RECORDS
+		SCRIPT prepareInput
+
+			echo $FOLDER
+                     
+			if [ $proton == T ]; then
+				cnam=c1p.xyz
+			else
+				cnam=c1n.xyz
+			fi
+
+			case $prog in
+				abinit) cp $PROTOTYPES/xyz2abinit .  
+					[ -a Psps_for_tests ] || ln -s $PROTOTYPES/Psps_for_tests Psps_for_tests;
+					cp $PROTOTYPES/run_abinit .
+					cp $PROTOTYPES/tbase.in0 .  
+					;;
+				nwchem) cp $PROTOTYPES/xyz2nw . 
+					cp $PROTOTYPES/run_nwchem .
+					;;
+				lammps) cp $PROTOTYPES/toupper .
+					cp $PROTOTYPES/make_sed_change .
+					cp $PROTOTYPES/xyz2lmp . 
+					[ -a NN-Water ] || ln -s $PROTOTYPES/NN-Water NN-Water;
+					cp $PROTOTYPES/run_lammps .
+					cp $PROTOTYPES/sim.templ . 
+					;;
+			esac
+		
+			cp $PROTOTYPES/$cnam c.xyz
+			cp $PROTOTYPES/sc_rest.xyz .
+
+			cp $PROTOTYPES/lmpdriver.py . 
+			cp $PROTOTYPES/gen_cluster.py .
+			
+			python gen_cluster.py c.xyz sc_rest.xyz $molecule cluster.xyz
+		
+			cp $PROTOTYPES/run_$prog .
+ 
+		ENDSCRIPT prepareInput
+		SCRIPT run
+
+			echo $FOLDER
+			echo $prog $molecule $proton
+
+			if [ -f energy.dat ]; then
+				echo energy.dat exists! skiping the calculation! To re-start the calculation - run clear
+			else	
+		
+				tic=$(date +%s)
+				[ -f basis.dat ]&& basis=$(cat basis.dat);	
+				./run_$prog cluster.xyz $basis
+				cp E_${prog}_cluster.dat energy.dat
+				toc=$(date +%s)
+				echo $((toc-tic)) >> time.dat
+				echo calculated in $((toc-tic)) s 
+
+			fi
+
+		ENDSCRIPT run
+		SCRIPT clear
+
+			rm -f energy.dat
+
+		ENDSCRIPT clear
+		SCRIPT recalcDivergent
+			N=$( cat energy.dat | wc -w )
+		
+			[ $N -gt 0 ] && exit;
+
+			rm -f energy.dat
+
+			if [ $prog == 'nwchem' ]; then
+				echo 6-31G > basis.dat
+				./run
+
+			fi
+
+
+		ENDSCRIPT recalcDivergent
+		SCRIPT remove_nwchem_4clusters
+
+			[ $prog != 'nwchem' ] && exit;
+			[ $proton == 'T' ]&& exit;
+
+			N=$(echo $molecule | wc -c)
+			[ $N != 9 ]&& exit;  # cXcY... 8 + 1 (\n)
+
+			mv energy.dat energy_old.dat
+			echo > energy.dat
+
+		ENDSCRIPT remove_nwchem_4clusters
+	ENDBLOCK SCRIPTS
+END METHOD QM
+
+END CHAIN IMPLEMENTATION

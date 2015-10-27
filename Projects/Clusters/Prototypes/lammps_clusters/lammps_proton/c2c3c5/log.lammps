@@ -1,0 +1,228 @@
+LAMMPS (28 Jun 2014)
+###############################################################################
+# MD simulation for Cu with NN potential
+###############################################################################
+
+###############################################################################
+# VARIABLES
+###############################################################################
+clear
+variable dt              equal  0.002                                                   # timestep (ps)
+variable intThermo       equal  1                                                       # screen output interval (timesteps)
+variable intRestart      equal  1                                                      # restart file interval (timesteps)
+variable numSteps        equal  1                                                      # total number of simulation timesteps (timesteps)
+variable runnerCutoff    equal  6                                                # largest symmetry function cutoff (Angstrom)
+variable mass1           equal  63.546                                                  # mass for element 1 (Cu) (g/mol)
+variable nameStartCfg    string "tmp.lmpsys"                                         # name of the starting configuration file
+variable nameRestartEnd  string "restart"                                         # name of final state restart file
+variable runnerDir       string "NN-Water"                                              # directory containing RuNNer files
+# set initial velocity distribution
+variable initTemp        equal  300.0                                                   # initial temperature (K)
+variable velSeed         equal  42                                                     # seed for random number generator >0!
+# NVT integrator (Nose-Hoover)
+variable startTemp       equal  300.0                                                   # starting temperature for thermostat (K)
+variable stopTemp        equal  300.0                                                   # final temperature for thermostat (K)
+variable tDamp           equal  0.10                                                    # thermostat damping factor (ps)
+# dump xyz trajectory file
+#variable intDumpXYZ      equal  10                                                      # xyz dump file interval (timesteps)
+#variable nameDumpXYZ     string "traj/states.xyz"                                       # xyz file name
+# dump thermodynamic properties (temperature, pressure, potential energy, kinetic energy, integrator quantity)
+variable intTD           equal  1                                                      # thermodynamics dump file interval (timesteps)
+variable nameTD          string "td.out"                                               # thermodynamics file name
+variable varVolume       equal  vol                                                     # variable required to print volume
+variable varKE           equal  ke                                                      # variable required to print kinetic energy
+###############################################################################
+# SETUP
+###############################################################################
+units metal                                                                              # define unit system (metal = Angstrom, eV, ps, g/mol)
+boundary p p p                                                                          # set periodic boundary conditions
+atom_style atomic                                                                       # set atomic style for particles
+read_data ${nameStartCfg}                                                               # read start configuration
+read_data tmp.lmpsys                                                               
+  orthogonal box = (-24.5667 -20.0492 -21.9128) to (19.1756 25.1165 23.2021)
+  1 by 1 by 1 MPI processor grid
+  reading atoms ...
+  13 atoms
+
+mass 1 1
+mass 2 16                                                                         # set mass for element 1
+
+pair_style runner dir ${runnerDir} showew yes resetew no maxew 0                        # set up pair style runner
+pair_style runner dir NN-Water showew yes resetew no maxew 0                        
+RuNNer pair style directory           : NN-Water/
+Show extrapolation warnings           : yes
+Show extrapolation warning summary    : no
+Reset extrapolation warning counter   : no
+Maximum allowed extrapolation warnings: 0
+pair_coeff * * ${runnerCutoff}                                                          # set up pair style coefficients
+pair_coeff * * 6                                                          
+timestep ${dt}                                                                          # set timestep
+timestep 0.002                                                                          
+#restart ${intRestart} ${nameRestart1} ${nameRestart2}                                   # write alternating binary restart files
+velocity all create ${initTemp} ${velSeed}                                              # create initial velocities
+velocity all create 300 ${velSeed}                                              
+velocity all create 300 42                                              
+fix INT all nvt temp ${startTemp} ${stopTemp} ${tDamp}                                  # set up integrator
+fix INT all nvt temp 300 ${stopTemp} ${tDamp}                                  
+fix INT all nvt temp 300 300 ${tDamp}                                  
+fix INT all nvt temp 300 300 0.1                                  
+fix AVE_TD all ave/time ${intTD} 1 ${intTD} c_thermo_temp c_thermo_press v_varVolume c_thermo_pe v_varKE f_INT file ${nameTD} mode scalar       # set up thermodynamic properties output
+fix AVE_TD all ave/time 1 1 ${intTD} c_thermo_temp c_thermo_press v_varVolume c_thermo_pe v_varKE f_INT file ${nameTD} mode scalar       
+fix AVE_TD all ave/time 1 1 1 c_thermo_temp c_thermo_press v_varVolume c_thermo_pe v_varKE f_INT file ${nameTD} mode scalar       
+fix AVE_TD all ave/time 1 1 1 c_thermo_temp c_thermo_press v_varVolume c_thermo_pe v_varKE f_INT file td.out mode scalar       
+#dump XYZ all xyz ${intDumpXYZ} ${nameDumpXYZ}                                           # set up xyz dump
+#dump_modify XYZ first yes sort id                                                       # modify xyz dump
+#thermo ${intThermo}                                                                     # set screen output
+###############################################################################
+# SIMULATION
+###############################################################################
+run ${numSteps}                                                                         # RUN SIMULATIONi
+run 1                                                                         
+-----------------------------------------------------------------------
+Starting RuNNer pair style setup...
+-----------------------------------------------------------------------
+Analyzing input.nn...
+-----------------------------------------------------------------------
+Number of elements:  2
+Element  0:  H ( 1)
+Element  1:  O ( 8)
+-----------------------------------------------------------------------
+Free atom energy of element  0 ( H) =  -5.05259070E-01
+-----------------------------------------------------------------------
+Free atom energy of element  1 ( O) =  -7.51663643E+01
+-----------------------------------------------------------------------
+normalize_nodes detected.
+-----------------------------------------------------------------------
+Number of hidden layers:  2
+-----------------------------------------------------------------------
+Element  0 ( H): layer  0:  35 nodes
+Element  0 ( H): layer  1:  35 nodes
+Element  0 ( H): layer  2:   1 nodes
+Element  1 ( O): layer  0:  35 nodes
+Element  1 ( O): layer  1:  35 nodes
+Element  1 ( O): layer  2:   1 nodes
+Element  0 ( H): layer  0: activation function:  2
+Element  0 ( H): layer  1: activation function:  2
+Element  0 ( H): layer  2: activation function:  1
+Element  1 ( O): layer  0: activation function:  2
+Element  1 ( O): layer  1: activation function:  2
+Element  1 ( O): layer  2: activation function:  1
+-----------------------------------------------------------------------
+center_symmetry_functions detected.
+-----------------------------------------------------------------------
+Element  0 ( H): 23 symmetry functions
+Element  1 ( O): 21 symmetry functions
+-----------------------------------------------------------------------
+Finished analyzing input.nn.
+-----------------------------------------------------------------------
+Element  0 ( H): layer  0 allocated, dim: ( 23, 35), act. func.:  2
+Element  0 ( H): layer  1 allocated, dim: ( 35, 35), act. func.:  2
+Element  0 ( H): layer  2 allocated, dim: ( 35,  1), act. func.:  1
+Element  1 ( O): layer  0 allocated, dim: ( 21, 35), act. func.:  2
+Element  1 ( O): layer  1 allocated, dim: ( 35, 35), act. func.:  2
+Element  1 ( O): layer  2 allocated, dim: ( 35,  1), act. func.:  1
+-----------------------------------------------------------------------
+Element  0 ( H): Reading NN-Water/weights.001.data...
+Element  0 ( H): weights:   2065, bias:   71, total:   2136
+Element  1 ( O): Reading NN-Water/weights.008.data...
+Element  1 ( O): weights:   1995, bias:   71, total:   2066
+-----------------------------------------------------------------------
+Sorting according to   type.
+Sorting according to     rc.
+Sorting according to    eta.
+Sorting according to   zeta.
+Sorting according to lambda.
+Sorting according to     rs.
+Sorting according to     e1.
+Sorting according to     e2.
+Printing symmetry functions...
+-----------------------------------------------------------------------
+short range atomic symmetry functions element  H
+-----------------------------------------------------------------------
+   1  H  2  H              0.010   0.000  19.000
+   2  H  2  O              0.010   0.000  19.000
+   3  H  2  H              0.030   0.000  19.000
+   4  H  2  O              0.030   0.000  19.000
+   5  H  2  H              0.070   0.000  19.000
+   6  H  2  O              0.070   0.000  19.000
+   7  H  2  H              2.000   0.000  19.000
+   8  H  2  O              2.000   0.000  19.000
+   9  H  3  H  H   0.001  -1.000   4.000  19.000
+  10  H  3  O  O   0.001  -1.000   4.000  19.000
+  11  H  3  O  O   0.001   1.000   4.000  19.000
+  12  H  3  H  O   0.010  -1.000   4.000  19.000
+  13  H  3  H  H   0.010   1.000   4.000  19.000
+  14  H  3  H  O   0.010   1.000   4.000  19.000
+  15  H  3  H  O   0.030  -1.000   1.000  19.000
+  16  H  3  O  O   0.030  -1.000   1.000  19.000
+  17  H  3  H  O   0.030   1.000   1.000  19.000
+  18  H  3  O  O   0.030   1.000   1.000  19.000
+  19  H  3  H  H   0.070  -1.000   1.000  19.000
+  20  H  3  H  O   0.070  -1.000   1.000  19.000
+  21  H  3  H  O   0.070   1.000   1.000  19.000
+  22  H  3  H  H   0.200   1.000   1.000  19.000
+  23  H  3  H  O   0.200   1.000   1.000  19.000
+-----------------------------------------------------------------------
+short range atomic symmetry functions element  O
+-----------------------------------------------------------------------
+   1  O  2  H              0.010   0.000  19.000
+   2  O  2  O              0.010   0.000  19.000
+   3  O  2  H              0.030   0.000  19.000
+   4  O  2  O              0.030   0.000  19.000
+   5  O  2  H              0.070   0.000  19.000
+   6  O  2  O              0.070   0.000  19.000
+   7  O  2  H              2.000   0.000  19.000
+   8  O  3  H  O   0.001  -1.000   4.000  19.000
+   9  O  3  O  O   0.001  -1.000   4.000  19.000
+  10  O  3  H  O   0.001   1.000   4.000  19.000
+  11  O  3  O  O   0.001   1.000   4.000  19.000
+  12  O  3  H  H   0.010  -1.000   4.000  19.000
+  13  O  3  H  H   0.010   1.000   4.000  19.000
+  14  O  3  H  H   0.030  -1.000   1.000  19.000
+  15  O  3  H  O   0.030  -1.000   1.000  19.000
+  16  O  3  O  O   0.030  -1.000   1.000  19.000
+  17  O  3  H  H   0.030   1.000   1.000  19.000
+  18  O  3  H  O   0.030   1.000   1.000  19.000
+  19  O  3  O  O   0.030   1.000   1.000  19.000
+  20  O  3  H  H   0.070  -1.000   1.000  19.000
+  21  O  3  H  H   0.070   1.000   1.000  19.000
+-----------------------------------------------------------------------
+Reading scaling.data...
+Finished reading scaling.data.
+-----------------------------------------------------------------------
+rcmax = 19.000000
+-----------------------------------------------------------------------
+RuNNer pair style setup completed.
+-----------------------------------------------------------------------
+Memory usage per processor = 1.68887 Mbytes
+Step Temp E_pair E_mol TotEng Press 
+       0          300    -8345.773            0   -8345.3077   -36.248837 
+       1     262.9247   -8345.6851            0   -8345.2773   -53.588147 
+Loop time of 0.00490904 on 1 procs for 1 steps with 13 atoms
+
+Pair  time (%) = 0.00486994 (99.2035)
+Neigh time (%) = 0 (0)
+Comm  time (%) = 1.19209e-06 (0.0242836)
+Outpt time (%) = 1.00136e-05 (0.203983)
+Other time (%) = 2.7895e-05 (0.568237)
+
+Nlocal:    13 ave 13 max 13 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Nghost:    0 ave 0 max 0 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Neighs:    0 ave 0 max 0 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+
+Total # of neighbors = 0
+Ave neighs/atom = 0
+Neighbor list builds = 0
+Dangerous builds = 0
+write_restart ${nameRestartEnd}                                                         # write final configuration (binary)
+write_restart restart                                                         
+###############################################################################
+# CLEAN UP
+###############################################################################
+#undump XYZ
+#unfix AVE_TD
+#unfix INT
+###############################################################################

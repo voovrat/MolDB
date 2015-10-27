@@ -1,0 +1,29 @@
+#!/bin/bash
+
+nam=$(echo $1 | gawk -F . '{print $1}')
+
+echo '%NProcShared=2'  > $nam.com
+echo '%mem=2GB'  >> $nam.com
+echo '# B3LYP/6-311G**  SCF=Tight Integral(Grid=UltraFine) EmpiricalDispersion=GD3' >> $nam.com
+echo  >> $nam.com
+echo 'Optimierung_Oktatmer_RU1' >> $nam.com
+echo >> $nam.com
+
+
+if [ $2 == 'T' ]; then
+ echo 1 1 >> $nam.com
+else
+ echo 0 1 >> $nam.com
+fi
+tail -n+3 $1 >> $nam.com
+echo >> $nam.com
+
+
+
+
+g09 < $nam.com > $nam.log
+
+EH=$(cat $nam.log | grep 'E(' | gawk -F= '{print $2}' | gawk '{print $1}' )
+E=$(echo print '"%0.15f" % ('$EH'*27.2113845657195) ' | python )
+echo $E
+echo $E > E_gaussian_$nam.dat
