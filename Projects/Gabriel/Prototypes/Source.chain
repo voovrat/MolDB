@@ -1,0 +1,68 @@
+PROJECT Gabriel
+
+BEGIN CHAIN PROTOTYPE
+1 METHOD
+RUN METHOD 1
+USE MD5
+
+
+BEGIN METHOD Source
+ID 1
+
+	BLOCK DEPENDENCIES
+	0 RECORDS	
+	ENDBLOCK DEPENDENCIES
+
+	BLOCK PARAMETERS
+	1 RECORDS
+		molecule = FILE molecules.lst
+	ENDBLOCK PARAMETERS
+
+	BLOCK SCRIPTS
+	5 RECORDS
+        
+          SCRIPT unpack
+
+            ./copy
+            ./toxyz
+            ./togro0
+            ./ff
+
+          ENDSCRIPT
+
+          SCRIPT copy
+
+           cp $PROTOTYPES/../Sources/$molecule.gro mol.gro
+ 
+          ENDSCRIPT
+
+	  SCRIPT togro0
+              cat mol.gro  | grep GLU  > mol.gro0
+          ENDSCRIPT
+
+          SCRIPT toxyz 
+              cat mol.gro  | grep GLU  | gawk '{print $2" "$4*10" "$5*10" "$6*10}' | sed 's:\([A-Z]\)\([^ ]*\):\1:g' > mol.xyz0     
+
+          N=$(cat mol.xyz0 | wc -l)
+
+          echo $N > mol.xyz
+          echo $molecule >> mol.xyz
+          cat mol.xyz0 >> mol.xyz
+
+          cat mol.xyz0 | gawk '{print $2" "$3" "$4}' > mol.coors 
+
+          ENDSCRIPT
+ 
+          SCRIPT ff
+
+             $PROTOTYPES/assign_ff $PROTOTYPES/../Sources/FF mol.gro0 > mol0.rism
+             centrateMolecule mol0.rism mol.rism
+          ENDSCRIPT
+         
+
+
+	ENDBLOCK SCRIPTS
+
+END METHOD Source
+
+END CHAIN PROTOTYPE

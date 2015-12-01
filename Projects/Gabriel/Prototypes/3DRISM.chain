@@ -1,0 +1,83 @@
+PROJECT Gabriel
+
+BEGIN CHAIN PROTOTYPE
+2 METHODS
+RUN METHOD 2
+USE MD5
+
+FROM Source.chain IMPORT METHOD 1 AS 1
+
+BEGIN METHOD 3DRISM
+ID 2
+
+	BLOCK DEPENDENCIES
+	1 RECORDS	
+          METHOD 1 AS Source
+	ENDBLOCK DEPENDENCIES
+
+	BLOCK PARAMETERS
+	3 RECORDS
+          buffer = LIST 15
+          dr = LIST 0.5
+          tol     = LIST 0.1
+#	+	molecule = FILE molecules.lst
+	ENDBLOCK PARAMETERS
+
+	BLOCK SCRIPTS
+	4 RECORDS
+
+          SCRIPT prepareInput
+
+	     cp $PROTOTYPES/3DR/* . 
+             cp $Source/mol.rism . 	             
+
+             cat > sed.cmd <<EOL
+s:__BUFFER__:$buffer:g
+s:__SPACING__:$dr:g
+s:__TOLERANCE__:$tol:g  
+EOL
+                 
+            cat parameters.tmpl | sed -f sed.cmd > parameters.txt
+
+
+          ENDSCRIPT
+
+          SCRIPT run
+
+             echo $FOLDER
+             multiGridMain parameters.txt  > multi_grid.log
+
+          ENDSCRIPT
+
+          SCRIPT free_energy
+
+            echo $FOLDER
+            calculateFreeEnergySimple mol_in_water_  > SFE.dat
+            cat SFE.dat | grep HNC: | gawk '{print $2}' > HNC.dat
+            cat SFE.dat | grep KH: | gawk '{print $2}' > KH.dat
+            cat SFE.dat | grep VUA: | gawk '{print $2}' > VUA.dat
+
+            VUA=$(cat VUA.dat)
+            HNC=$(cat HNC.dat)
+
+            cp $PROTOTYPES/water_PC.m .
+            octave -q --eval "water_PC($HNC,$VUA)" > PC.dat
+
+            cat PC.dat | grep P: | gawk '{print $2}' > pressure.dat
+            cat PC.dat | grep P: | gawk '{print $4}' > PKBar.dat
+            cat PC.dat | grep HNC/PC | gawk '{print $2}' > HNCPC.dat 
+
+          ENDSCRIPT
+
+          
+          SCRIPT clean
+
+             rm -f *.3d *.grd
+
+          ENDSCRIPT
+
+        ENDBLOCK SCRIPTS
+
+END METHOD 3DRISM
+
+END CHAIN PROTOTYPE
